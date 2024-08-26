@@ -153,7 +153,8 @@ class Environment:
     def __init__(self):
         self.dh = DirectoryHandler()
         self.sp = ScriptParser()
-        self.local_connection_file='local_connection.yaml'
+        # self.local_connection_file='local_connection.yaml'
+        self.local_connection_file='connections.toml'
         self.query_variables_file='query_variables.yaml'
         self.param_reqs = ['SNOWSQL_ACCOUNT','SNOWSQL_USER','SNOWSQL_PWD','SNOWSQL_WAREHOUSE','SNOWSQL_ROLE','SNOWSQL_DB', 'BOBSLED_ENV']
         self.env_var='BOBSLED_ENV'
@@ -161,6 +162,7 @@ class Environment:
         self.bobsled_env = self.params.get(self.env_var)
         self.query_variables = self.get_query_variables(self.bobsled_env)
         self.sp.substitutions = self.query_variables 
+
     
     def get_params(self):
         local= self._get_local_params()

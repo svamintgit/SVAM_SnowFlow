@@ -31,8 +31,8 @@ class SnowflakeUser:
     
     def _get_session(self) -> Session:
         try:
-            connection_params = self._get_connection_parameters(self.environment.params)
-            return Session.builder.configs(connection_params).create()
+           session = Session.builder.config("connection_name", "bobsled").create()
+           return session
         except Exception as e:
             logging.error(e)
             logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')

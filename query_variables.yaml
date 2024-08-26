@@ -1,0 +1,9 @@
+DEV_ACCOUNT:
+  '!!!storage_url!!!': https://svamint.visualstudio.com/SVAM_Internal_Bobsled/_git/SVAM_Internal_Bobsled
+  '!!!ENABLED!!!': 'TRUE'
+TST_DB:
+  '!!!storage_url!!!': https://svamint.visualstudio.com/SVAM_Internal_Bobsled/_git/SVAM_Internal_Bobsled
+  '!!!ENABLED!!!': 'TRUE'
+PRD_DB:
+  '!!!storage_url!!!': https://svamint.visualstudio.com/SVAM_Internal_Bobsled/_git/SVAM_Internal_Bobsled
+  '!!!ENABLED!!!': 'TRUE'
