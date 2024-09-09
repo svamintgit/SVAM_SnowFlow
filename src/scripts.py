@@ -150,71 +150,32 @@ class DirectoryHandler:
         return Path(self.root_dir, relative_path)
 
 class Environment:
-    def __init__(self):
+    def __init__(self, environment: str):
+        if not environment:
+            raise ValueError("Environment not specified. Please provide a valid environment.")
         self.dh = DirectoryHandler()
         self.sp = ScriptParser()
-        # self.local_connection_file='local_connection.yaml'
-        self.local_connection_file='connections.toml'
-        self.query_variables_file='query_variables.yaml'
-        self.param_reqs = ['SNOWSQL_ACCOUNT','SNOWSQL_USER','SNOWSQL_PWD','SNOWSQL_WAREHOUSE','SNOWSQL_ROLE','SNOWSQL_DB', 'BOBSLED_ENV']
-        self.env_var='BOBSLED_ENV'
-        self.params = self.get_params()
-        self.bobsled_env = self.params.get(self.env_var)
-        self.query_variables = self.get_query_variables(self.bobsled_env)
-        self.sp.substitutions = self.query_variables 
-
+        self.query_variables_file = 'query_variables.yaml'
+        self.env_var = environment  # Use the environment passed during initialization
+        self.query_variables = self.get_query_variables(self.env_var)  # Retain other functionalities if needed
+        self.sp.substitutions = self.query_variables
     
-    def get_params(self):
-        local= self._get_local_params()
-        if len(local.keys()) == 0:
-            logging.info('no local keys, using env')
-            params = self._get_env_params()
-        else:
-            params = local
-        valid = self._validate_params(params)
-        if valid:
-            return params
-        else:
-            logging.error('Input parameters are invalid. Please check that your local_connection file or environment variables contain '+str(self.param_reqs))
-            sys.exit(1)
-    
-    def _get_local_params(self) -> dict:
-        '''
-        Read the connection parameters from the local_connection.yaml file
-        '''
-        try:
-            local_path = self.dh.get_absolute_path(self.local_connection_file)
-            raw_params = self.sp.parse_yaml_file(local_path)
-            return raw_params
-        except Exception as e:
-            logging.error(e)
-            return {}
-        
-    def _get_env_params(self) -> dict:
-        '''
-        Read the connection parameters from the environment variables
-        '''
-        return dict(os.environ)
-
-    def _validate_params(self, params: dict)-> bool:
-        if set(self.param_reqs).issubset(set(params.keys())):
-            return True
-        else:
-            logging.error('could not find all required keys. missing the following:')
-            logging.error(set(self.param_reqs).difference(set(params.keys()))) 
-            return False
-
     def get_query_variables(self, env):
         '''
         Get a dict containing all query variables for the environment
         '''
         try:
             local_path = self.dh.get_absolute_path(self.query_variables_file)
+            logging.info(f"Looking for query variables in: {local_path}")
             raw_vars = self.sp.parse_yaml_file(local_path)
+            if env not in raw_vars:
+                raise ValueError(f"Environment '{env}' is not defined in the query variables file.")
+            logging.info(f"Query variables found for environment '{env}': {raw_vars[env]}")
             return raw_vars[env]
         except Exception as e:
             logging.error(e)
-            return {}
+            sys.exit(1)
+            
 
     def initialize(self):
         '''
@@ -226,8 +187,10 @@ class SnowflakeAcct:
     '''
     Provides an interface between the repo files and a Snowflake account 
     '''
-    def __init__(self) -> None:
-        self.environment = Environment()
+    def __init__(self, environment: str) -> None:
+        if not environment:
+            raise ValueError("Environment not specified. Please provide a valid environment.")
+        self.environment = Environment(environment)
         self.sp = self.environment.sp
         self.dh = self.environment.dh
         self.env_dir= Path(self.dh.root_dir, 'snowflake')
@@ -250,6 +213,10 @@ class SnowflakeAcct:
     def get_grants(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.env_dir, 'grants.sql'))
     
+    def run_global_init(self) -> list[str]:
+        global_init_path = Path(self.env_dir, 'init.sql')
+        return self.sp.read_file_queries(global_init_path)
+    
     def get_databases(self) -> list:
         #return all the database objects
         return [SnowflakeDB(d.stem,self) for d in self.child_lookup['databases'].iterdir() if d.is_dir()]
@@ -265,7 +232,7 @@ class SnowflakeDB:
         self.path_lookup = self.dh.get_path_lookup(self.path, self.child_objects)
         self.dml_path = Path(self.path, 'dml')
         self.grants_files = Path(self.path, 'grants.sql')
-        self.init_file = Path(self.path, 'grants.sql')
+        self.init_file = Path(self.path, 'init.sql')
     
     def __str__(self):
         return self.name
@@ -501,7 +468,10 @@ class Task:
     
     def get_sql_proc_code(self) -> list[str]: 
         proc_path = Path(self.templates_folder, 'sql_procedure_template.sql')
-        return self.sp.read_clean_file(proc_path)
+        sql_proc_code = self.sp.read_clean_file(proc_path)
+
+        print(f"Generated SQL Procedure for {self.name}: \n{sql_proc_code}")
+        return sql_proc_code
     
     def get_when_clause(self) -> str:
         value = self.config_dict.get('WHEN', None)

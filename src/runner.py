@@ -1,20 +1,16 @@
 from snowflake.snowpark import Session, Row
+from snowflake.connector.errors import ProgrammingError, Error
 import logging
 import sys
 import scripts
 
 class SnowflakeUser:
-    def __init__(self):
-        self.environment = scripts.Environment()
-        self.query_variables = self.environment.query_variables
-        self.connection_keys = {
-                "account": 'SNOWSQL_ACCOUNT',
-                "user":'SNOWSQL_USER',
-                "password": 'SNOWSQL_PWD',
-                "warehouse": 'SNOWSQL_WAREHOUSE',
-                "role": 'SNOWSQL_ROLE',
-                "database":'SNOWSQL_DB'
-            }
+    def __init__(self, environment: str):
+        if not environment:
+            raise ValueError("Environment not specified. Please provide a valid environment.")
+        self.environment = environment
+        self.environment_obj = scripts.Environment(environment) 
+        self.query_variables = self.environment_obj.query_variables
         self.session = self._get_session()
     
     def _get_connection_parameters(self, input_dict: dict) -> dict:
@@ -28,15 +24,19 @@ class SnowflakeUser:
         else:
             logging.error('could not find all requirement connection params')
             return {}
-    
+
     def _get_session(self) -> Session:
         try:
-           session = Session.builder.config("connection_name", "bobsled").create()
-           return session
+            session = Session.builder.config("connection_name", self.environment).create()
+            return session
         except Exception as e:
-            logging.error(e)
-            logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
-            sys.exit(1)
+            logging.error(type(e))
+            if "Invalid Environment Name" in str(e):  
+                raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
+            else:
+                logging.error(e)
+                logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
+                sys.exit(1)
 
     def run_query(self, query:str) -> list[Row]:
         try:

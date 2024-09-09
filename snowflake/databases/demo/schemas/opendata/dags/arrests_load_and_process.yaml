@@ -1,0 +1,79 @@
+DAG_NAME: arrests_load_and_process
+SCHEDULE: 'USING CRON * * * * * UTC'
+WAREHOUSE: 'load'
+ROOT_TASK: root
+INITIAL_WAREHOUSE_SIZE: 'XSMALL'
+ALLOW_OVERLAPPING_EXECUTION: 'FALSE'
+ENABLED: 'TRUE'
+
+TASKS:
+  - NAME: root
+    SCRIPT_PATH: arrests_load_and_process/root.sql
+    SCRIPT_TYPE: sql
+
+  - NAME: copy_bronx_arrests
+    SCRIPT_PATH: arrests_load_and_process/copy_bronx_arrests.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - root
+    
+  - NAME: copy_brooklyn_arrests
+    SCRIPT_PATH: arrests_load_and_process/copy_brooklyn_arrests.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - root
+
+  - NAME: copy_manhattan_arrests
+    SCRIPT_PATH: arrests_load_and_process/copy_manhattan_arrests.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - root
+
+  - NAME: copy_queens_arrests
+    SCRIPT_PATH: arrests_load_and_process/copy_queens_arrests.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON:
+      - root
+
+  - NAME: copy_statenisland_arrests
+    SCRIPT_PATH: arrests_load_and_process/copy_statenisland_arrests.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON:
+      - root
+
+  - NAME: copy_nta
+    SCRIPT_PATH: arrests_load_and_process/copy_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON:
+      - root
+
+  # Insert Into Statements
+  - NAME: insert_bronx_arrests_nta
+    SCRIPT_PATH: arrests_load_and_process/insert_bronx_arrests_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - copy_bronx_arrests
+    
+  - NAME: insert_brooklyn_arrests_nta
+    SCRIPT_PATH: arrests_load_and_process/insert_brooklyn_arrests_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - copy_brooklyn_arrests
+    
+  - NAME: insert_manhattan_arrests_nta
+    SCRIPT_PATH: arrests_load_and_process/insert_manhattan_arrests_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - copy_manhattan_arrests
+    
+  - NAME: insert_queens_arrests_nta
+    SCRIPT_PATH: arrests_load_and_process/insert_queens_arrests_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON: 
+      - copy_queens_arrests
+    
+  - NAME: insert_statenisland_arrests_nta
+    SCRIPT_PATH: arrests_load_and_process/insert_statenisland_arrests_nta.sql
+    SCRIPT_TYPE: sql
+    DEPENDS_ON:
+      - copy_statenisland_arrests

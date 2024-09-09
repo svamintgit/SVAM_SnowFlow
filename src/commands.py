@@ -2,6 +2,7 @@ import logging
 import sys
 import runner
 import scripts
+from pathlib import Path
 
 class Argument:
     def __init__(self, option, required, help):
@@ -22,10 +23,11 @@ class BobsledCommand:
         pass
 
 class Deploy:
-    def __init__(self) -> None:
+    def __init__(self, environment: str) -> None:
         self.name = 'deploy'
         self.help = ' Specify no options to deploy account objects, just a db to deploy database objects, or a db and schema to deploy a schema. The account and database actually used are specified in the connection parameters  '
         self.args = self.get_args()
+        self.environment = environment
 
     def get_args(self) -> list[Argument]:
         args = []
@@ -34,20 +36,21 @@ class Deploy:
         return args
     
     def run(self, args: dict) -> None:
-        user = runner.SnowflakeUser()
+        user = runner.SnowflakeUser(self.environment)
+        self.run_global_init(user)
         if args.get('d')==None:
             logging.info('Bobsled deploy account')
             self.account(user)
         elif args.get('s')==None:
             logging.info('Bobsled deploy db')
-            self.database(user,args.d)
+            self.database(user,args.get('d'))
         else:
             logging.info('Bobsled deploy schema')
             self.schema(user,args.get('d'),args.get('s'))
 
     def account(self, user: runner.SnowflakeUser) -> None:
         user.session.query_tag= 'Bobsled deploy account'
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         user.run_queries(acct.get_roles())
         user.run_queries(acct.get_warehouses())
         user.run_queries(acct.get_integrations())
@@ -56,7 +59,7 @@ class Deploy:
     def database(self, user: runner.SnowflakeUser, db_name:str) -> None:
         logging.info('Bobsled deploy db')
         user.session.query_tag= 'Bobsled deploy db- '+db_name
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         user.run_queries(db.get_db_init())
         logging.info('DB Deployed')
@@ -64,15 +67,15 @@ class Deploy:
     def schema(self, user: runner.SnowflakeUser, db_name:str, schema_name: str) -> None:
         logging.info('Bobsled deploy schema')
         user.session.query_tag= 'Bobsled deploy schema- '+db_name+'.'+schema_name
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
         user.run_queries(schema.get_schema_init())
         user.session.use_schema(schema_name)
+        user.run_queries(schema.get_file_formats())
         user.run_queries(schema.get_stages())
         user.post_files(schema.get_staged_files())
         user.run_queries(schema.get_udfs())
-        user.run_queries(schema.get_file_formats())
         user.run_queries(schema.get_tables())
         user.run_queries(schema.get_streams())
         user.run_queries(schema.get_views())
@@ -83,11 +86,28 @@ class Deploy:
         user.run_queries(schema.get_grants())
         logging.info('Schema deployed')
 
+    def run_global_init(self, user: runner.SnowflakeUser) -> None:
+        logging.info('Running global init')
+        acct = scripts.SnowflakeAcct(self.environment)
+        global_init_queries = acct.run_global_init()
+        user.run_queries(global_init_queries)
+        logging.info('Global init completed')
+
 class Init:
-    def __init__(self) -> None:
+    def __init__(self, environment: str) -> None:
         self.name = 'init'
         self.help = 'initialize folder for account, database, or schema'
         self.args = self.get_args()
+        self.environment = environment
+        self._validate_environment()
+
+    def _validate_environment(self):
+        try:
+            # This will raise an error if the environment is not valid
+            _ = scripts.Environment(self.environment)
+        except ValueError as e:
+            logging.error(e)
+            sys.exit(1)  
 
     def get_args(self) -> list[Argument]:
         args = []
@@ -96,36 +116,41 @@ class Init:
         return args
     
     def run(self, args: dict) -> None:
-        if args.get('d')==None:
+        db_name = args.get('d')
+        schema_name = args.get('s')
+        if not self.environment:
+            raise ValueError("Environment must be specified. Please provide a valid environment.")
+        if not db_name:
             logging.info('Bobsled initialize account')
-            self.account()
-        elif args.get('s')==None:
+            self.account(self.environment)
+        elif not schema_name:
             logging.info('Bobsled initialize db')
-            self.database(args.get('d'))
+            self.database(db_name)
         else:
             logging.info('Bobsled initialize schema')
-            self.schema(args.get('d'),args.get('s'))
+            self.schema(db_name, schema_name)
 
     def account(self) -> None:
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         logging.info(acct.initialize())
 
     def database(self, db_name:str) -> None:
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         logging.info(db.initialize())
 
     def schema(self, db_name:str, schema_name: str) -> None:
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
         logging.info(schema.initialize())
 
 class Clone:
-    def __init__(self) -> None:
+    def __init__(self, environment: str) -> None:
         self.name = 'clone'
         self.help = 'clone a database or schema. specify just the database to clone the database, specify schema to clone a schema'
         self.args = self.get_args()
+        self.environment = environment
 
     def get_args(self) -> list[Argument]:
         args = []
@@ -153,14 +178,15 @@ class Clone:
             source = sd+'.'+ss
             tgt = td+'.'+ts
             query = 'create or replace schema '+tgt+' clone '+source
-        user = runner.SnowflakeUser()
+        user = runner.SnowflakeUser(self.environment)
         logging.info(user.run_query(query))
 
 class RunScript:
-    def __init__(self) -> None:
+    def __init__(self, environment: str) -> None:
         self.name = 'run_script'
         self.help = 'run a specific SQL script'
         self.args = self.get_args()
+        self.environment = environment
 
     def get_args(self) -> list[Argument]:
         args = []
@@ -174,8 +200,8 @@ class RunScript:
         schema= args.get('s')
         script_path= args.get('f')
 
-        user = runner.SnowflakeUser()
-        env = scripts.Environment()
+        user = runner.SnowflakeUser(self.environment)
+        env = scripts.Environment(self.environment)
         path = env.dh.get_absolute_path(script_path)
         queries = env.sp.read_file_queries(path)
         if database:
@@ -185,10 +211,11 @@ class RunScript:
         logging.info(user.run_queries(queries))
 
 class TestDAG:
-    def __init__(self) -> None:
+    def __init__(self, environment: str) -> None:
         self.name = 'test_dag'
         self.help = 'Test run a DAG file'
         self.args = self.get_args()
+        self.environment = environment
 
     def get_args(self) -> list[Argument]:
         args = []
@@ -201,12 +228,12 @@ class TestDAG:
         database= args.get('d')
         schema_name= args.get('s')
         script_path= args.get('f')
-        acct = scripts.SnowflakeAcct()
+        acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(database,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
         queries= schema.get_dag(script_path)
         try:
-            user = runner.SnowflakeUser()
+            user = runner.SnowflakeUser(self.environment)
             user.session.use_schema(schema_name)
             logging.info(user.run_queries(queries))
         except Exception as e:
@@ -217,5 +244,5 @@ class TestDAG:
 if __name__=="__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
     config = {'d': 'mocj_db', 's': 'utility'}
-    cmd = Init()
+    cmd = Init(environment='dev')
     logging.info(cmd.run(config))
