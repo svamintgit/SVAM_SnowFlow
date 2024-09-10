@@ -6,7 +6,7 @@ CREATE OR REPLACE TABLE bronx_arrests_with_nta (
     PERP_SEX CHAR(1),
     PERP_RACE STRING,
     OFNS_DESC STRING,
-    New_Georeferenced_Column GEOGRAPHY
+    New_Georeferenced_Column GEOGRAPHY,
     NTAName STRING,
     BoroName STRING
 );

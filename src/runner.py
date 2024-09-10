@@ -3,6 +3,8 @@ from snowflake.connector.errors import ProgrammingError, Error
 import logging
 import sys
 import scripts
+import os
+import toml
 
 class SnowflakeUser:
     def __init__(self, environment: str):
@@ -11,6 +13,7 @@ class SnowflakeUser:
         self.environment = environment
         self.environment_obj = scripts.Environment(environment) 
         self.query_variables = self.environment_obj.query_variables
+        self.config = self._load_toml_config()
         self.session = self._get_session()
     
     def _get_connection_parameters(self, input_dict: dict) -> dict:
@@ -24,19 +27,66 @@ class SnowflakeUser:
         else:
             logging.error('could not find all requirement connection params')
             return {}
+        
+    def _load_toml_config(self) -> dict:
+        home_dir = os.path.expanduser("~") 
+        toml_file_path = os.path.join(home_dir, ".snowflake", "connections.toml")
 
+        # Load the TOML configuration
+        try:
+            with open(toml_file_path, "r") as toml_file:
+                config = toml.load(toml_file)
+                return config
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Could not find connections.toml file at {toml_file_path}.")
+        except Exception as e:
+            raise Exception(f"An error occurred while reading the TOML file: {e}")
+        
     def _get_session(self) -> Session:
         try:
-            session = Session.builder.config("connection_name", self.environment).create()
-            return session
-        except Exception as e:
-            logging.error(type(e))
-            if "Invalid Environment Name" in str(e):  
-                raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
+            environment_config = self.config.get(self.environment)
+
+            if not environment_config:
+                raise ValueError(f"Environment '{self.environment}' not found in the TOML file.")
+
+            logging.info(f"Loaded configuration: {self.config}")
+
+            private_key_path = environment_config.get("private_key_path")
+
+            if private_key_path:
+                with open(private_key_path, "rb") as key_file:
+                    logging.info(f"Private key path found: {private_key_path}")
+                    private_key = key_file.read()
+
+                passphrase = environment_config.get("private_key_passphrase")
+
+                session_builder = Session.builder.configs({
+                    "account": environment_config["account"],
+                    "user": environment_config["user"],
+                    "authenticator": "snowflake_jwt", 
+                    "private_key": private_key,  
+                    "role": environment_config["role"],
+                    "database": environment_config["database"],
+                    "warehouse": environment_config["warehouse"],
+                })
+
+                if passphrase:
+                    session_builder = session_builder.config("private_key_passphrase", passphrase)
+
+                session = session_builder.create()
+
             else:
-                logging.error(e)
-                logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
-                sys.exit(1)
+                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
+
+            return session
+
+        except ProgrammingError as e:
+            logging.error(f"Error: {e}")
+            raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
+        except Error as e:
+            logging.error(e)
+            logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
+            sys.exit(1)
 
     def run_query(self, query:str) -> list[Row]:
         try:
