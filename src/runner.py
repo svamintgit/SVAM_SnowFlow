@@ -32,7 +32,6 @@ class SnowflakeUser:
         home_dir = os.path.expanduser("~") 
         toml_file_path = os.path.join(home_dir, ".snowflake", "connections.toml")
 
-        # Load the TOML configuration
         try:
             with open(toml_file_path, "r") as toml_file:
                 config = toml.load(toml_file)
@@ -42,50 +41,64 @@ class SnowflakeUser:
         except Exception as e:
             raise Exception(f"An error occurred while reading the TOML file: {e}")
         
+    def _connect_with_rsa(self, environment_config):
+        private_key_path = environment_config.get("private_key_path")
+
+        if private_key_path:
+            with open(private_key_path, "rb") as key_file:
+                private_key = key_file.read()
+
+            passphrase = environment_config.get("private_key_passphrase")
+
+            session_builder = Session.builder.configs({
+                "account": environment_config["account"],
+                "user": environment_config["user"],
+                "authenticator": "snowflake_jwt",  
+                "private_key": private_key,
+                "role": environment_config["role"],
+                "database": environment_config["database"],
+                "warehouse": environment_config["warehouse"],
+            })
+
+            if passphrase:
+                session_builder = session_builder.config("private_key_passphrase", passphrase)
+
+            return session_builder.create()
+        else:
+            raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
+
+    def _connect_with_password(self):
+        try:
+            session = Session.builder.config("connection_name", self.environment).create()
+            return session
+        except Exception as e:
+            logging.error(type(e))
+            if "Invalid Environment Name" in str(e):
+                raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
+            else:
+                logging.error(e)
+                logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
+                sys.exit(1)
+
     def _get_session(self) -> Session:
         try:
             environment_config = self.config.get(self.environment)
-
             if not environment_config:
                 raise ValueError(f"Environment '{self.environment}' not found in the TOML file.")
 
-            logging.info(f"Loaded configuration: {self.config}")
+            logging.info(f"Loaded configuration for {self.environment}: {self.config}")
 
-            private_key_path = environment_config.get("private_key_path")
-
-            if private_key_path:
-                with open(private_key_path, "rb") as key_file:
-                    logging.info(f"Private key path found: {private_key_path}")
-                    private_key = key_file.read()
-
-                passphrase = environment_config.get("private_key_passphrase")
-
-                session_builder = Session.builder.configs({
-                    "account": environment_config["account"],
-                    "user": environment_config["user"],
-                    "authenticator": "snowflake_jwt", 
-                    "private_key": private_key,  
-                    "role": environment_config["role"],
-                    "database": environment_config["database"],
-                    "warehouse": environment_config["warehouse"],
-                })
-
-                if passphrase:
-                    session_builder = session_builder.config("private_key_passphrase", passphrase)
-
-                session = session_builder.create()
-
+            if "private_key_path" in environment_config:
+                return self._connect_with_rsa(environment_config)
             else:
-                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
-
-            return session
+                return self._connect_with_password()
 
         except ProgrammingError as e:
             logging.error(f"Error: {e}")
             raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
         except Error as e:
             logging.error(e)
-            logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
+            logging.error('If using local connection file, ensure parameters are correct. Else set your env variables')
             sys.exit(1)
 
     def run_query(self, query:str) -> list[Row]:
