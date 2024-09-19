@@ -194,7 +194,7 @@ class SnowflakeAcct:
         self.sp = self.environment.sp
         self.dh = self.environment.dh
         self.env_dir= Path(self.dh.root_dir, 'snowflake')
-        self.child_objects= ['databases', 'integrations', 'roles','warehouses']
+        self.child_objects= ['databases', 'integrations', 'roles','warehouses', 'network_rules', 'network_policies']
         self.child_lookup = self.dh.get_path_lookup(self.env_dir, self.child_objects)
 
     def initialize(self) -> None:
@@ -209,6 +209,12 @@ class SnowflakeAcct:
     
     def get_integrations(self) -> list[str]:
         return self.sp.get_path_queries(self.child_lookup['integrations'])
+    
+    def get_network_rules(self) -> list[str]:
+        return self.sp.get_path_queries(self.child_lookup['network_rules'])
+    
+    def get_network_policies(self) -> list[str]:
+        return self.sp.get_path_queries(self.child_lookup['network_policies'])
 
     def get_grants(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.env_dir, 'grants.sql'))

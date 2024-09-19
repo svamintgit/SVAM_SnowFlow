@@ -54,6 +54,8 @@ class Deploy:
         user.run_queries(acct.get_roles())
         user.run_queries(acct.get_warehouses())
         user.run_queries(acct.get_integrations())
+        user.run_queries(acct.get_network_rules())
+        user.run_queries(acct.get_network_policies())
         logging.info('Account deployed')
 
     def database(self, user: runner.SnowflakeUser, db_name:str) -> None:

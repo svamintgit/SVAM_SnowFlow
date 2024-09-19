@@ -90,16 +90,17 @@ class SnowflakeUser:
 
             if "private_key_path" in environment_config:
                 return self._connect_with_rsa(environment_config)
-            else:
+            elif "user" in environment_config and "password" in environment_config:
                 return self._connect_with_password()
+            else:
+                raise ValueError(f"Missing login credentials. Please add either 'private_key_path' for RSA key-pair authentication or 'user' and 'password' for username-password authentication to the TOML file.")
 
         except ProgrammingError as e:
-            logging.error(f"Error: {e}")
-            raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
+            logging.error(f"ProgrammingError: {e}")
+            raise ValueError(f"An error occurred while processing the environment '{self.environment}'. Ensure the environment is correctly defined in the TOML file.")
         except Error as e:
-            logging.error(e)
-            logging.error('If using local connection file, ensure parameters are correct. Else set your env variables')
-            sys.exit(1)
+            logging.error(f"Snowflake connection error: {e}")
+            raise RuntimeError('Failed to establish a Snowflake session. Verify connection parameters or environment settings.')
 
     def run_query(self, query:str) -> list[Row]:
         try:
