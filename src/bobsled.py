@@ -43,13 +43,23 @@ class ArgHandler:
         return parsed_args.command
 
     def exec(self):
-        parsed_args = vars(self.parser.parse_args())
-        logging.info(f"Parsed arguments: {parsed_args}")
-        cmd = parsed_args.get('cmd')
-        if not cmd:
-            self.parser.print_help()
+        try:
+            parsed_args = vars(self.parser.parse_args())
+            logging.info(f"Parsed arguments: {parsed_args}")
+            cmd = parsed_args.get('cmd')
+            if not cmd:
+                self.parser.print_help()
+                sys.exit(1)
+            self.mapper[cmd].run(parsed_args)
+        except ValueError as ve:
+            logging.error(f"Command not found: {ve}")
             sys.exit(1)
-        self.mapper[cmd].run(parsed_args)
+        except RuntimeError as rte:
+            logging.error(f"Runtime error: {rte}")
+            sys.exit(1)  
+        except Exception as e:
+            logging.error(f"Unexpected error during execution: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,

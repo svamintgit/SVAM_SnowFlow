@@ -20,9 +20,15 @@ class ScriptParser:
                 string_file = self.substitute_vars(string_file)
                 dict = yaml.safe_load(string_file)
             return dict
+        except FileNotFoundError as e:
+            logging.error(f"YAML file not found at path: {file_path}. Error: {e}")
+            raise
+        except yaml.YAMLError as e:
+            logging.error(f"YAML parsing error in {file_path}. Error: {e}")
+            raise
         except Exception as e:
-            logging.error(e)
-            return {}
+            logging.error(f"Unexpected error while parsing YAML file: {e}")
+            raise
 
     def get_path_yamls(self, path: Path) -> list[dict]:
         try:
@@ -30,9 +36,12 @@ class ScriptParser:
             for f in path.glob("*.yaml"):
                 yamls.append(self.parse_yaml_file(f))
             return yamls
+        except FileNotFoundError as e:
+            logging.error(f"YAML directory not found: {e}")
+            raise
         except Exception as e:
-            logging.error(e)
-            return [{}]
+            logging.error(f"Unexpected error while retrieving YAML files: {e}")
+            raise
 
     def clean_query(self, query: str) -> str:
         '''
@@ -46,19 +55,21 @@ class ScriptParser:
         try:
             for var, val in self.substitutions.items():
                 query= query.replace(var, str(val))
-        except Exception as e:
-            logging.error(e)
-            logging.error('query = '+query)
-            logging.error(self.substitutions)
-        finally:
             return query
+        except TypeError as te:
+            logging.error(f"TypeError in substitute_vars: {te}. Substitutions: {self.substitutions}")
+            raise
+        except Exception as e:
+            logging.error(f"Unexpected error in substitue_vars: {e}")
+            logging.error(f"Query: {query}, Substitutions: {self.substitutions}")
+            raise
     
     def strip_special_chars(self, query: str) -> str:
         try:
             return query.rstrip()
         except Exception as e:
-            logging.error(e)
-            return query
+            logging.error(f"Unexpected error in strip_special_chars: {e}")
+            raise
 
     def clean_query_list(self, queries: list) -> list[str]:
         try:
@@ -156,8 +167,8 @@ class Environment:
         self.dh = DirectoryHandler()
         self.sp = ScriptParser()
         self.query_variables_file = 'query_variables.yaml'
-        self.env_var = environment  # Use the environment passed during initialization
-        self.query_variables = self.get_query_variables(self.env_var)  # Retain other functionalities if needed
+        self.env_var = environment  
+        self.query_variables = self.get_query_variables(self.env_var) 
         self.sp.substitutions = self.query_variables
     
     def get_query_variables(self, env):
@@ -172,10 +183,15 @@ class Environment:
                 raise ValueError(f"Environment '{env}' is not defined in the query variables file.")
             logging.info(f"Query variables found for environment '{env}': {raw_vars[env]}")
             return raw_vars[env]
+        except FileExistsError as e:
+            logging.error(f"Query variables file not found: {e}")
+            raise
+        except yaml.YAMLError as e:
+            logging.error(f"Error in parsing YAML for query variables: {e}")
+            raise
         except Exception as e:
-            logging.error(e)
-            sys.exit(1)
-            
+            logging.error(f"Unexpected error in get_query_variables: {e}")
+            raise
 
     def initialize(self):
         '''

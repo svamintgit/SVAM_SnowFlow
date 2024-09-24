@@ -1,5 +1,5 @@
 from snowflake.snowpark import Session, Row
-from snowflake.connector.errors import ProgrammingError, Error
+from snowflake.connector.errors import ProgrammingError, DatabaseError
 import logging
 import sys
 import scripts
@@ -42,43 +42,51 @@ class SnowflakeUser:
             raise Exception(f"An error occurred while reading the TOML file: {e}")
         
     def _connect_with_rsa(self, environment_config):
-        private_key_path = environment_config.get("private_key_path")
+        try:
+            private_key_path = environment_config.get("private_key_path")
 
-        if private_key_path:
-            with open(private_key_path, "rb") as key_file:
-                private_key = key_file.read()
+            if private_key_path:
+                with open(private_key_path, "rb") as key_file:
+                    private_key = key_file.read()
 
-            passphrase = environment_config.get("private_key_passphrase")
+                passphrase = environment_config.get("private_key_passphrase")
 
-            session_builder = Session.builder.configs({
-                "account": environment_config["account"],
-                "user": environment_config["user"],
-                "authenticator": "snowflake_jwt",  
-                "private_key": private_key,
-                "role": environment_config["role"],
-                "database": environment_config["database"],
-                "warehouse": environment_config["warehouse"],
-            })
+                session_builder = Session.builder.configs({
+                    "account": environment_config["account"],
+                    "user": environment_config["user"],
+                    "authenticator": "snowflake_jwt",  
+                    "private_key": private_key,
+                    "role": environment_config["role"],
+                    "database": environment_config["database"],
+                    "warehouse": environment_config["warehouse"],
+                })
 
-            if passphrase:
-                session_builder = session_builder.config("private_key_passphrase", passphrase)
+                if passphrase:
+                    session_builder = session_builder.config("private_key_passphrase", passphrase)
 
-            return session_builder.create()
-        else:
-            raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
+                return session_builder.create()
+            else:
+                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
+        except FileNotFoundError as e:
+            logging.error(f"Private key file not found at path: {private_key_path}. Error: {e}")
+            raise
+        except (ProgrammingError, DatabaseError) as db_error:
+            logging.error(f"Snowflake connection error: {db_error}")
+            raise
+        except Exception as e:
+            logging.error(f"Unexpected error occured during RSA authentication: {e}")
+            raise
 
     def _connect_with_password(self):
         try:
             session = Session.builder.config("connection_name", self.environment).create()
             return session
+        except (ProgrammingError, DatabaseError) as db_error:
+            logging.error(f"Snowflake connection error: {db_error}")
+            raise
         except Exception as e:
-            logging.error(type(e))
-            if "Invalid Environment Name" in str(e):
-                raise ValueError(f"Environment name '{self.environment}' does not match any environment in the TOML file.")
-            else:
-                logging.error(e)
-                logging.error('If using local_connection file, ensure parameters are correct. Else set your env variables')
-                sys.exit(1)
+            logging.error(f"Unexpected error occured during connection: {e}")
+            raise
 
     def _get_session(self) -> Session:
         try:
@@ -95,12 +103,15 @@ class SnowflakeUser:
             else:
                 raise ValueError(f"Missing login credentials. Please add either 'private_key_path' for RSA key-pair authentication or 'user' and 'password' for username-password authentication to the TOML file.")
 
-        except ProgrammingError as e:
-            logging.error(f"ProgrammingError: {e}")
-            raise ValueError(f"An error occurred while processing the environment '{self.environment}'. Ensure the environment is correctly defined in the TOML file.")
-        except Error as e:
-            logging.error(f"Snowflake connection error: {e}")
-            raise RuntimeError('Failed to establish a Snowflake session. Verify connection parameters or environment settings.')
+        except ValueError as ve:
+            logging.error(f"ValueError: {ve}")
+            raise
+        except (ProgrammingError, DatabaseError) as db_error:
+            logging.error(f"Snowflake connection error: {db_error}")
+            raise
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            raise RuntimeError('Failed to establish Snowflake session')
 
     def run_query(self, query:str) -> list[Row]:
         try:
@@ -109,10 +120,14 @@ class SnowflakeUser:
             else:
                 res = [Row()]    
             return res
+        except (ProgrammingError, DatabaseError) as db_error:
+            logging.error(f"Snowflake query execution error: {db_error}")
+            logging.error(f"Query: {query}")
+            raise
         except Exception as e:
-            logging.error(e)
-            logging.error(query)
-            return [Row()]
+            logging.error(f"Unexpected error during query execution: {e}")
+            logging.error(f"Query: {query}")
+            raise
     
     def run_queries(self, queries: list) -> list:
         '''
@@ -120,7 +135,16 @@ class SnowflakeUser:
         '''
         outp = []
         for query in queries:
-            outp.append(self.run_query(query))
+            try:
+                outp.append(self.run_query(query))
+            except (ProgrammingError, DatabaseError) as db_error:
+                logging.error(f"Programming query execution error: {db_error}")
+                logging.error(f"Query: {query}")
+                raise
+            except Exception as e:
+                logging.error(f"Unexpected error while executing query: {e}")
+                logging.error(f"Query: {query}")
+                raise
         return outp
     
     def post_files(self, file_configs: list[dict]) -> list:
@@ -129,8 +153,8 @@ class SnowflakeUser:
             outp.append(self.session.file.put(file_config['local_path'], file_config['stage_path'], auto_compress=False, overwrite=True))
         return outp
 
-if __name__=="__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-    queries = ['select 1', 'select 2']
-    session = Session.builder.config("connection_name", "DEV_ACCOUNT").create()
-    print(session.sql('select 1'))
+# if __name__=="__main__":
+#     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
+#     queries = ['select 1', 'select 2']
+#     session = Session.builder.config("connection_name", "DEV_ACCOUNT").create()
+#     print(session.sql('select 1'))
