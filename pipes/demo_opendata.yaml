@@ -7,31 +7,45 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+# Set variables based on branch
+variables:
+  - ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
+    - group: dev_account
+  - ${{ if eq(variables['Build.SourceBranchName'], 'prd') }}:
+    - group: prd_account
+
 steps:
 - task: UsePythonVersion@0
+  displayName: 'Use Python 3.9.x'
   inputs:
     versionSpec: '3.9.x'
 
-# Install dependencies
-- script: |
-    echo 'Installing dependencies'
-    pip install -r requirements.txt
-  displayName: 'Install Python dependencies'
+# Install dependencies (commented out for now, you can re-enable once requirements.txt is functional)
+# - script: |
+#     echo 'Installing dependencies'
+#     pip install -r requirements.txt
+#   displayName: 'Install Python dependencies'
 
 # Deploy to mydev
-- script: |
-    echo 'Deploying to mydev'
-    bobsled deploy -e mydev -d demo -s opendata
-  displayName: 'Deploy to mydev'
-  condition: eq(variables['Build.SourceBranchName'], 'mydev')
+- task: Bash@3
+  displayName: 'Run Dev Deployment'
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo 'Deploying to mydev'
+      bobsled deploy -e mydev -d demo -s opendata
+  condition: eq(variables['Build.SourceBranchName'], 'dev')
   env:
     PRIVATE_KEY: $(PRIVATE_KEY)
 
 # Deploy to prdbranch
-- script: |
-    echo 'Deploying to prdbranch'
-    bobsled deploy -e prdbranch -d demo_dev -s opendata
-  displayName: 'Deploy to prdbranch'
-  condition: eq(variables['Build.SourceBranchName'], 'prdbranch')
+- task: Bash@3
+  displayName: 'Run PRD Deployment'
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo 'Deploying to prdbranch'
+      bobsled deploy -e prdbranch -d demo_dev -s opendata
+  condition: eq(variables['Build.SourceBranchName'], 'prd')
   env:
     SNOWFLAKE_PWD: $(SNOWFLAKE_PWD)
