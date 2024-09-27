@@ -152,9 +152,3 @@ class SnowflakeUser:
         for file_config in file_configs:
             outp.append(self.session.file.put(file_config['local_path'], file_config['stage_path'], auto_compress=False, overwrite=True))
         return outp
-
-# if __name__=="__main__":
-#     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-#     queries = ['select 1', 'select 2']
-#     session = Session.builder.config("connection_name", "DEV_ACCOUNT").create()
-#     print(session.sql('select 1'))

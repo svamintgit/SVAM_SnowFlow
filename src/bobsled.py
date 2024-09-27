@@ -61,7 +61,7 @@ class ArgHandler:
             logging.error(f"Unexpected error during execution: {e}")
             sys.exit(1)
 
-if __name__ == "__main__":
+def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
 
@@ -77,3 +77,6 @@ if __name__ == "__main__":
     sys.argv = [sys.argv[0]] + remaining_argv
 
     handler.exec()
+
+if __name__ == "__main__":
+    main()

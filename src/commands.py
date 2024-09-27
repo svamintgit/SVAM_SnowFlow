@@ -299,9 +299,3 @@ class TestDAG:
         except Exception as e:
             logging.error(f"Unexpected error during DAG test: {e}")
             raise
-
-# if __name__=="__main__":
-#     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
-#     config = {'d': 'mocj_db', 's': 'utility'}
-#     cmd = Init(environment='dev')
-#     logging.info(cmd.run(config))
