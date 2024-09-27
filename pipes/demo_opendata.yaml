@@ -21,10 +21,10 @@ steps:
     versionSpec: '3.9.x'
 
 # Install dependencies (commented out for now, you can re-enable once requirements.txt is functional)
-# - script: |
-#     echo 'Installing dependencies'
-#     pip install -r requirements.txt
-#   displayName: 'Install Python dependencies'
+- script: |
+    echo 'Installing dependencies'
+    pip install -r requirements.txt
+  displayName: 'Install Python dependencies'
 
 # Deploy to mydev
 - task: Bash@3
