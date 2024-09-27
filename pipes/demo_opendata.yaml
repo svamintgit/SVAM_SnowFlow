@@ -20,11 +20,12 @@ steps:
   inputs:
     versionSpec: '3.9.x'
 
-# Install dependencies (commented out for now, you can re-enable once requirements.txt is functional)
+# Install dependencies and Bobsled
 - script: |
     echo 'Installing dependencies'
     pip install -r requirements.txt
-  displayName: 'Install Python dependencies'
+    pip install -e .
+  displayName: 'Install Python dependencies and Bobsled'
 
 # Deploy to mydev
 - task: Bash@3
