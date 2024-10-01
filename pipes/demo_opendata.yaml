@@ -20,6 +20,18 @@ steps:
   inputs:
     versionSpec: '3.9.x'
 
+# Download connections.toml
+- task: DownloadSecureFile@1
+  inputs:
+    secureFile: 'connections.toml'
+  displayName: 'Download connections.toml'
+
+# Move connections.toml file to correct location
+- script: |
+    mkdir -p ~/.snowflake
+    mv $(Agent.TempDirectory)/connections.toml ~/.snowflake/connections.toml
+  displayName: 'Move connections.toml to Snowflake folder'
+
 # Install dependencies and Bobsled
 - script: |
     echo 'Installing dependencies'
