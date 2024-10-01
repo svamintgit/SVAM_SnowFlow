@@ -40,6 +40,11 @@ steps:
     sed -i 's|C:/Users/AryanSingh/rsa_key.der|~/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
+# Debug: Check content of connections.toml
+- script: |
+    cat ~/.snowflake/connections.toml
+  displayName: 'Check connections.toml content'
+
 # Install dependencies and Bobsled
 - script: |
     echo 'Installing dependencies'
