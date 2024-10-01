@@ -7,11 +7,6 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
-# Set variables based on branch
-variables:
-  - ${{ if eq(variables['Build.SourceBranchName'], 'prd') }}:
-    - group: prd_account
-
 steps:
 - task: UsePythonVersion@0
   displayName: 'Use Python 3.9.x'
@@ -40,11 +35,6 @@ steps:
     sed -i 's|C:/Users/AryanSingh/rsa_key.der|/home/vsts/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
-# Debug: Check content of connections.toml
-- script: |
-    cat ~/.snowflake/connections.toml
-  displayName: 'Check connections.toml content'
-
 # Install dependencies and Bobsled
 - script: |
     echo 'Installing dependencies'
@@ -71,5 +61,3 @@ steps:
       echo 'Deploying to prdbranch'
       bobsled deploy -e prdbranch -d demo_dev -s opendata
   condition: eq(variables['Build.SourceBranchName'], 'prd')
-  env:
-    SNOWFLAKE_PWD: $(SNOWFLAKE_PWD)
