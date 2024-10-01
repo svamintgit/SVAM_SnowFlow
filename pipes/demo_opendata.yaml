@@ -9,8 +9,6 @@ pool:
 
 # Set variables based on branch
 variables:
-  - ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
-    - group: dev_account
   - ${{ if eq(variables['Build.SourceBranchName'], 'prd') }}:
     - group: prd_account
 
@@ -26,11 +24,18 @@ steps:
     secureFile: 'connections.toml'
   displayName: 'Download connections.toml'
 
-# Move connections.toml file to correct location
+# Download rsa_key.der file for mydev
+- task: DownloadSecureFile@1
+  inputs:
+    secureFile: 'rsa_key.der'
+  displayName: 'Download rsa_key.der for mydev'
+
+# Move connections.toml file and rsa_key.der to correct location
 - script: |
     mkdir -p ~/.snowflake
     mv $(Agent.TempDirectory)/connections.toml ~/.snowflake/connections.toml
-  displayName: 'Move connections.toml to Snowflake folder'
+    mv $(Agent.TempDirectory)/rsa_key.der ~/.snowflake/rsa_key.der
+  displayName: 'Move files to Snowflake folder'
 
 # Install dependencies and Bobsled
 - script: |
@@ -48,8 +53,6 @@ steps:
       echo 'Deploying to mydev'
       bobsled deploy -e mydev -d demo -s opendata
   condition: eq(variables['Build.SourceBranchName'], 'dev')
-  env:
-    PRIVATE_KEY: $(PRIVATE_KEY)
 
 # Deploy to prdbranch
 - task: Bash@3
