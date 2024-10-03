@@ -1,5 +1,4 @@
 import logging
-import sys
 import runner
 import scripts
 from pathlib import Path
