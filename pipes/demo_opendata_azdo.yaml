@@ -27,11 +27,12 @@ steps:
 
 # Move connections.toml file and rsa_key.der to correct location
 # Dynamically update the private key path in connections.toml
+# Extract local private_key_path and replace it with Linux path
 - script: |
     mkdir -p ~/.snowflake
     mv $(Agent.TempDirectory)/connections.toml ~/.snowflake/connections.toml
     mv $(Agent.TempDirectory)/rsa_key.der ~/.snowflake/rsa_key.der
-
+    local_key_path = $(grep 'private_key_path' ~/.snowflake/connections.toml | awk -F'=' '{print $2}' | tr -d ' "')
     sed -i 's|C:/Users/AryanSingh/rsa_key.der|/home/vsts/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
