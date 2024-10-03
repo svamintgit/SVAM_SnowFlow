@@ -1,7 +1,6 @@
 from snowflake.snowpark import Session, Row
 from snowflake.connector.errors import ProgrammingError, DatabaseError
 import logging
-import sys
 import scripts
 import os
 import toml
