@@ -1,0 +1,23 @@
+trigger:
+  branches:
+    include:
+      - prd
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.x'
+
+  - script: |
+      pip install --upgrade setuptools wheel twine
+      python setup.py sdist bdist_wheel
+    displayName: 'Build Python package'
+
+  - task: TwineUpload@1
+    inputs:
+      packagePath: 'dist/*'
+      twineUsername: $(PYPI_USERNAME)
+      twinePassword: $(PYPI_PASSWORD)
