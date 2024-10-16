@@ -1,0 +1,5 @@
+-- Test
+CREATE TABLE IF NOT EXISTS TEST_TABLE (
+    num INT,
+    name STRING,
+);
