@@ -1,6 +1,6 @@
 import logging
-import runner
-import scripts
+from . import runner
+from . import scripts
 from pathlib import Path
 from snowflake.connector.errors import ProgrammingError, DatabaseError
 
@@ -82,8 +82,11 @@ class Deploy:
         acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
-        user.run_queries(schema.get_schema_init())
+
+        schema_queries = schema.get_schema_init() 
+        user.run_queries(schema_queries)
         user.session.use_schema(schema_name)
+
         user.run_queries(schema.get_file_formats())
         user.run_queries(schema.get_stages())
         user.post_files(schema.get_staged_files())

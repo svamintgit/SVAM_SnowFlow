@@ -7,3 +7,4 @@ include requirements.txt
 # Exclude folders not needed in PyPi package
 prune pipes
 prune snowflake
+exclude bobsled/SVAM_Internal_Bobsled.code-workspace

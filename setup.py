@@ -9,6 +9,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
+    include_package_data=True,
     install_requires=[
         "snowflake-connector-python",
         "snowflake-snowpark-python",

@@ -1,7 +1,7 @@
 import logging
 import sys
 import argparse
-import commands
+from . import commands
 
 class ArgHandler:
     def __init__(self, environment: str) -> None:

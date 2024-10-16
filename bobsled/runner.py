@@ -1,7 +1,7 @@
 from snowflake.snowpark import Session, Row
 from snowflake.connector.errors import ProgrammingError, DatabaseError
 import logging
-import scripts
+from . import scripts
 import os
 import toml
 
@@ -43,6 +43,9 @@ class SnowflakeUser:
     def _connect_with_rsa(self, environment_config):
         try:
             private_key_path = environment_config.get("private_key_path")
+
+            if not os.path.isabs(private_key_path):
+                private_key_path = os.path.join(os.getcwd(), private_key_path)
 
             if private_key_path:
                 with open(private_key_path, "rb") as key_file:

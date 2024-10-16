@@ -86,14 +86,34 @@ class ScriptParser:
     def read_clean_file(self, path: Path) -> str:
         return self.clean_query(self.read_file(path))
     
+    # def read_file(self, path: Path) -> str:
+    #     try:
+    #         content = open(path).read()
+    #     except Exception as e:
+    #         logging.error(e)
+    #         return ''
+    #     else:
+    #         return content
+
     def read_file(self, path: Path) -> str:
-        try:
-            content = open(path).read()
-        except Exception as e:
-            logging.error(e)
-            return ''
+        """
+        Reads a file, checking the current working directory first.
+        """
+        # Check in the current working directory first
+        user_path = os.path.join(os.getcwd(), path)
+    
+        if os.path.exists(user_path):
+            try:
+                with open(user_path, 'r') as file:
+                    content = file.read()
+                return content
+            except Exception as e:
+                logging.error(f"Error reading file {user_path}: {e}")
+                return ''
         else:
-            return content
+            logging.error(f"File not found: {user_path}. Ensure the file exists.")
+            return ''
+
     
     def read_file_queries(self, path: Path, single_transaction=False) -> list[str]:
         '''
@@ -110,28 +130,50 @@ class ScriptParser:
             return []
     
 
+    # def get_path_queries(self, path: Path, single_transaction: bool = False) -> list[str]:
+    #     '''
+    #     Loop over path, return contents of files in a list of queries
+    #     '''
+    #     try:
+    #         queries=[]
+    #         for f in path.glob("*.sql"):
+    #             if single_transaction:
+    #                 queries.append(self.read_clean_file(f))
+    #             else:
+    #                 queries.extend(self.read_file_queries(f))
+    #     except Exception as e:
+    #         logging.error(e)
+    #         return []
+    #     else:
+    #         logging.debug(queries)
+    #         return queries
+
     def get_path_queries(self, path: Path, single_transaction: bool = False) -> list[str]:
-        '''
-        Loop over path, return contents of files in a list of queries
-        '''
-        try:
-            queries=[]
-            for f in path.glob("*.sql"):
-                if single_transaction:
-                    queries.append(self.read_clean_file(f))
-                else:
-                    queries.extend(self.read_file_queries(f))
-        except Exception as e:
-            logging.error(e)
+        """
+        Loop over path, return contents of files in a list of queries.
+        Looks in the current working directory.
+        """
+        user_path = os.path.join(os.getcwd(), path)
+    
+        if not os.path.exists(user_path):
+            logging.error(f"Directory not found: {user_path}")
             return []
-        else:
-            logging.debug(queries)
-            return queries
+
+        queries = []
+        for f in Path(user_path).glob("*.sql"):
+            if single_transaction:
+                queries.append(self.read_clean_file(f))
+            else:
+                queries.extend(self.read_file_queries(f))
+    
+        logging.debug(queries)
+        return queries
+
         
 class DirectoryHandler:
     def __init__(self):
-        self.root_dir = Path(__file__).resolve().parents[1]
-        self.sql_templates_path = Path(self.root_dir, 'src','sql_templates')
+        self.root_dir = os.getcwd()
+        self.sql_templates_path = Path(self.root_dir, 'bobsled','sql_templates')
 
     def mkdir(self, path: Path) -> Path:
         try:
@@ -156,9 +198,15 @@ class DirectoryHandler:
         Path(root, 'grants.sql').touch()
         return True
     
-    def get_absolute_path(self, relative_path: str):
-        #given a path relative to the root as a str, return a Path object
-        return Path(self.root_dir, relative_path)
+    # def get_absolute_path(self, relative_path: str):
+    #     #given a path relative to the root as a str, return a Path object
+    #     return Path(self.root_dir, relative_path)
+
+    def get_absolute_path(self, relative_path: str) -> Path:
+        """
+        Given a path relative to the root as a string, return a Path object based on the current working directory.
+        """
+        return Path(os.path.join(os.getcwd(), 'snowflake', relative_path))
 
 class Environment:
     def __init__(self, environment: str):
@@ -170,20 +218,22 @@ class Environment:
         self.env_var = environment  
         self.query_variables = self.get_query_variables(self.env_var) 
         self.sp.substitutions = self.query_variables
-    
+
     def get_query_variables(self, env):
-        '''
-        Get a dict containing all query variables for the environment
-        '''
         try:
-            local_path = self.dh.get_absolute_path(self.query_variables_file)
+            local_path = os.path.join(os.getcwd(), 'query_variables.yaml')
             logging.info(f"Looking for query variables in: {local_path}")
+
+            if not os.path.exists(local_path):
+                raise FileNotFoundError(f"query_variables.yaml not found at {local_path}. Please create this file with the appropriate variables for your environment.")
+
             raw_vars = self.sp.parse_yaml_file(local_path)
             if env not in raw_vars:
                 raise ValueError(f"Environment '{env}' is not defined in the query variables file.")
+
             logging.info(f"Query variables found for environment '{env}': {raw_vars[env]}")
             return raw_vars[env]
-        except FileExistsError as e:
+        except FileNotFoundError as e:
             logging.error(f"Query variables file not found: {e}")
             raise
         except yaml.YAMLError as e:
@@ -209,7 +259,7 @@ class SnowflakeAcct:
         self.environment = Environment(environment)
         self.sp = self.environment.sp
         self.dh = self.environment.dh
-        self.env_dir= Path(self.dh.root_dir, 'snowflake')
+        self.env_dir= Path(os.getcwd(), 'snowflake')
         self.child_objects= ['databases', 'integrations', 'roles','warehouses', 'network_rules', 'network_policies']
         self.child_lookup = self.dh.get_path_lookup(self.env_dir, self.child_objects)
 
@@ -249,7 +299,9 @@ class SnowflakeDB:
         self.sp = account.sp
         self.name=name
         self.dh = account.dh
-        self.path = Path(self.account.env_dir, 'databases',self.name)
+
+        # self.path = Path(self.account.env_dir, 'databases',self.name)
+        self.path = Path(os.getcwd(), 'snowflake', 'databases', self.name)
         self.child_objects= ['schemas', 'dml']
         self.path_lookup = self.dh.get_path_lookup(self.path, self.child_objects)
         self.dml_path = Path(self.path, 'dml')
@@ -292,7 +344,8 @@ class SnowflakeSchema:
         self.sp = database.sp
         self.dh = database.dh
         self.sp.substitutions = self.sp.substitutions | self.query_variables
-        self.schema_path = Path(self.database.path,'schemas',self.name)
+        # self.schema_path = Path(self.database.path,'schemas',self.name)
+        self.schema_path = Path(os.getcwd(), 'snowflake', 'databases', self.database.name, 'schemas', self.name)
 
         self.child_objects= ['file_formats', 'tables','streams','stages','views','tasks','dags','udfs', 'stored_procs', 'staged_files', 'post_deploy']
         self.path_lookup = self.dh.get_path_lookup(self.schema_path, self.child_objects)

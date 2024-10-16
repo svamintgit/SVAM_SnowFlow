@@ -171,7 +171,7 @@ role = "your_role"
 
 ### 2. `query_variables.yaml`
 
-This file contains environment-specific configuration variables that Bobsled uses during deployments and to validate environment names during command execution.
+This file contains environment-specific configuration variables that Bobsled uses during deployments and to validate environment names during command execution. Bobsled requires a `query_variables.yaml` file to be present in the directory where you are running the app.
 
 #### Example:
 ```yaml
@@ -249,6 +249,19 @@ steps:
       bobsled deploy -e prd_environment -d your_database -s your_schema
   condition: eq(variables['Build.SourceBranchName'], 'prd')
 ```
+
+### File Structure for SQL Scripts
+
+When deploying with Bobsled, your SQL scripts must be located in the following directory structure relative to your current working directory:
+
+├── snowflake ├── databases ├── <database_name> ├── schemas ├── <schema_name> ├── init.sql ├── grants.sql ├── file_formats ├── tables ├── stages ├── streams ├── views ├── tasks ├── udfs ├── stored_procs ├── post_deploy
+
+
+For example, if you are deploying a schema called `test_schema` under a database called `demo`, Bobsled will look for the SQL scripts under:
+
+snowflake/databases/demo/schemas/test_schema/
+
+Make sure to organize your SQL scripts according to this structure to ensure correct deployment.
 
 ## License
 
