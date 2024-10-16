@@ -587,29 +587,3 @@ class Task:
     def get_task_code(self) -> str:
         template_path = Path(self.templates_folder, self.dag.task_template)
         return self.sp.read_clean_file(template_path)
-
-if __name__=="__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-    #sp=ScriptParser()
-    #logging.info(sp.substitutions)
-    e =  Environment()
-    logging.info(e.query_variables)
-    acct= SnowflakeAcct()
-    db= SnowflakeDB('mocj_db', acct)
-    schema= SnowflakeSchema('cja',db)
-    dags = schema.get_dag_objs()
-    for dag in dags:
-        name = dag.name
-        if name=='cja_live':
-            logging.info(dag.task_dict)
-            logging.info(dag.digraph.edges(data=True))
-            for task in dag.task_dict.values():
-                logging.info(task.name)
-                logging.info(task.sp.substitutions)
-                #logging.info(task.get_create_queries())
-            '''
-            qs = dag.get_all_queries()
-            for q in qs:
-                logging.info(q[:50])
-            #logging.info(dag.get_all_queries())
-            '''
