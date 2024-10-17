@@ -29,9 +29,10 @@ class ArgHandler:
         return parser
 
     def add_command_parser(self, subparsers: argparse._SubParsersAction, command: commands.BobsledCommand) -> None:
+        logging.debug(command.name)
         parser = subparsers.add_parser(command.name, help=command.help)
-        parser.add_argument("-e", "--environment", required=True, help="Specify the environment.")
         for arg in command.args:
+            logging.debug(arg.option)
             parser.add_argument(arg.option, required=arg.required, help=arg.help)
 
     def list_mapper_commands(self) -> list[commands.BobsledCommand]:

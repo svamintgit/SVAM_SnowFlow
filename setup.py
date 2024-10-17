@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="bobsled",
-    version="0.1.18",
+    version="0.1.19",
     author="Thomas Garcia, Aryan Singh",
     author_email="tgarcia@svam.com, aryan.singh@svam.com",
     description="Bobsled - A Snowflake Deployment Tool",
