@@ -18,8 +18,6 @@ Ensure that you have configured your `connections.toml` and `query_variables.yam
 
 Bobsled supports a variety of commands to make Snowflake object management and deployment smoother. Below are the key commands, explanations, and examples of how to use them.
 
-Given your `commands.py` file, here’s a consistent explanation for each command that you can use for the README documentation.
-
 ### 1. `init`
 
 The `init` command is responsible for initializing the Snowflake environment, databases, or schemas. It sets up folder structures and prepares the account for deployment.
@@ -90,8 +88,6 @@ bobsled test_dag -e <environment> -d <database> -s <schema> -f <dag_file>
 
 Each function has error handling for scenarios such as invalid environments or database errors to ensure smooth execution.
 
-Here’s a markdown section that explains the authentication methods Bobsled supports, including the steps for RSA key-pair authentication:
-
 ## Authentication Methods
 
 Bobsled supports two authentication methods for connecting to Snowflake:
@@ -133,7 +129,7 @@ RSA Key-Pair Authentication is a more secure alternative to username/password. I
    ```
 
 5. **Test the Connection:**
-   Once you’ve updated your `connections.toml` and added the public key to Snowflake, test the connection by running a Bobsled command:
+   Once you have updated your `connections.toml` and added the public key to Snowflake, test the connection by running a Bobsled command:
    ```bash
    bobsled deploy -e <environment> -d <database> -s <schema>
    ```
@@ -176,23 +172,36 @@ This file contains environment-specific configuration variables that Bobsled use
 #### Example:
 ```yaml
 dev:
-  '!!!storage_url!!!': 
+  '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
 
 prd:
-  '!!!storage_url!!!': 
+  '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
 ```
 
-Here’s a revised section on the **Pipeline YAML File** for the README:
+## Requirements
 
-```markdown
+This project requires the following dependencies, which are listed in `requirements.txt`:
+
+* snowflake-connector-python 
+* snowflake-snowpark-python 
+* networkx 
+* toml 
+* pyyaml
+
+To install the dependencies, run:
+
+```
+pip install -r requirements.txt
+```
+
 ### 3. Pipeline YAML File
 
-Bobsled can be integrated into CI/CD pipelines to automate the deployment process, manage different environments (such as development and production), and ensure continuous deployment to Snowflake. Below is an example of a YAML file used in an Azure DevOps pipeline. This file can be modified according to your project’s specific needs, such as using environment variables, custom branches, and deployment commands.
+Bobsled can be integrated into CI/CD pipelines to automate the deployment process, manage different environments (such as development and production), and ensure continuous deployment to Snowflake. Below is an example of a YAML file used in an Azure DevOps pipeline. This file can be modified according to the specific needs of your project, such as using environment variables, custom branches, and deployment commands.
 
 #### Example Azure DevOps Pipeline Configuration:
-```yaml
+```
 trigger:
   branches:
     include:
@@ -229,6 +238,7 @@ steps:
 # Install Python dependencies and Bobsled
 - script: |
     pip install -r requirements.txt
+    pip install bobsled
   displayName: 'Install dependencies and Bobsled'
 
 # Deploy the changes using Bobsled for the development branch
@@ -252,16 +262,16 @@ steps:
 
 ### File Structure for SQL Scripts
 
-When deploying with Bobsled, your SQL scripts must be located in the following directory structure relative to your current working directory:
-
-├── snowflake ├── databases ├── <database_name> ├── schemas ├── <schema_name> ├── init.sql ├── grants.sql ├── file_formats ├── tables ├── stages ├── streams ├── views ├── tasks ├── udfs ├── stored_procs ├── post_deploy
-
-
-For example, if you are deploying a schema called `test_schema` under a database called `demo`, Bobsled will look for the SQL scripts under:
-
+When deploying with Bobsled, your SQL scripts must be located in the following directory structure relative to your current working directory. For example, if you are deploying a schema called `test_schema` under a database called `demo`, Bobsled will look for the SQL scripts under:
+```
 snowflake/databases/demo/schemas/test_schema/
-
+```
 Make sure to organize your SQL scripts according to this structure to ensure correct deployment.
+
+## Authors
+
+* Thomas Garcia - tgarcia@svam.com
+* Aryan Singh - aryan.singh@svam.com
 
 ## License
 

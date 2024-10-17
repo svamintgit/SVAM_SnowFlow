@@ -2,9 +2,9 @@ from setuptools import setup, find_packages
 
 setup(
     name="bobsled",
-    version="0.1",
-    author="Thomas Garcia",
-    author_email="tgarcia@svam.com",
+    version="0.1.18",
+    author="Thomas Garcia, Aryan Singh",
+    author_email="tgarcia@svam.com, aryan.singh@svam.com",
     description="Bobsled - A Snowflake Deployment Tool",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
@@ -13,10 +13,9 @@ setup(
     install_requires=[
         "snowflake-connector-python",
         "snowflake-snowpark-python",
-        "pyyaml",
         "networkx",
+        "pyyaml",
         "toml",
-        "argparse",
     ],
     entry_points={
         'console_scripts': [

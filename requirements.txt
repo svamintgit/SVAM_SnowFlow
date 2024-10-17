@@ -3,4 +3,3 @@ snowflake-snowpark-python
 pyyaml
 networkx
 toml
-argparse

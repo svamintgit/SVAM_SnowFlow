@@ -29,10 +29,9 @@ class ArgHandler:
         return parser
 
     def add_command_parser(self, subparsers: argparse._SubParsersAction, command: commands.BobsledCommand) -> None:
-        logging.debug(command.name)
         parser = subparsers.add_parser(command.name, help=command.help)
+        parser.add_argument("-e", "--environment", required=True, help="Specify the environment.")
         for arg in command.args:
-            logging.debug(arg.option)
             parser.add_argument(arg.option, required=arg.required, help=arg.help)
 
     def list_mapper_commands(self) -> list[commands.BobsledCommand]:
@@ -66,8 +65,12 @@ def main():
                         format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
 
     # Parse the global arguments like environment
-    global_parser = argparse.ArgumentParser(description="Bobsled Deployment Tool")
-    global_parser.add_argument("-e", "--environment", required=True, help="Specify the environment")
+    global_parser = argparse.ArgumentParser(
+        description="Bobsled Deployment Tool\n"
+                    "Required: Please use -e to specify the environment.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    global_parser.add_argument("-e", "--environment", required=True, help="Specify the environment.")
     args, remaining_argv = global_parser.parse_known_args()
 
     # Initialize ArgHandler with the environment and parse the command-specific arguments

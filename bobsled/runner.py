@@ -90,6 +90,27 @@ class SnowflakeUser:
             logging.error(f"Unexpected error occured during connection: {e}")
             raise
 
+    def _connect_with_sso(self, environment_config):
+        try:
+            session_builder = Session.builder.configs({
+                "account": environment_config["account"],
+                "user": environment_config["user"],
+                "authenticator": "externalbrowser",
+                "database": environment_config.get("database"),
+                "schema": environment_config.get("schema"),
+                "warehouse": environment_config.get("warehouse"),  
+                "role": environment_config.get("role"),
+            })
+
+            return session_builder.create()
+        
+        except (ProgrammingError, DatabaseError) as db_error:
+            logging.error(f"Snowflake connection error: {db_error}")
+            raise
+        except Exception as e:
+            logging.error(f"Unexpected error occurred during SSO authentication: {e}")
+            raise
+
     def _get_session(self) -> Session:
         try:
             environment_config = self.config.get(self.environment)
@@ -100,6 +121,8 @@ class SnowflakeUser:
 
             if "private_key_path" in environment_config:
                 return self._connect_with_rsa(environment_config)
+            elif "authenticator" in environment_config and environment_config["authenticator"] == "externalbrowser":
+                return self._connect_with_sso(environment_config)
             elif "user" in environment_config and "password" in environment_config:
                 return self._connect_with_password()
             else:
