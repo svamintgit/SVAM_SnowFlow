@@ -1,22 +1,22 @@
-# Bobsled
+# Snowflow
 
 ## Overview
 
-**Bobsled** is a command-line tool that simplifies and automates deployments, task management, and script execution within Snowflake environments. It allows users to easily manage Snowflake resources by streamlining object creation, data management, and running tasks like DAGs. Bobsled is built for scalable data pipeline management across multiple environments, integrating seamlessly with Snowflake APIs.
+**Snowflow** is a command-line tool that simplifies and automates deployments, task management, and script execution within Snowflake environments. It allows users to easily manage Snowflake resources by streamlining object creation, data management, and running tasks like DAGs. Snowflow is built for scalable data pipeline management across multiple environments, integrating seamlessly with Snowflake APIs.
 
 ## Installation
 
-To install Bobsled, use the following command:
+To install Snowflow, use the following command:
 
 ```bash
-pip install bobsled
+pip install snowflow
 ```
 
 Ensure that you have configured your `connections.toml` and `query_variables.yaml` properly before running the app.
 
 ## Features
 
-Bobsled supports a variety of commands to make Snowflake object management and deployment smoother. Below are the key commands, explanations, and examples of how to use them.
+Snowflow supports a variety of commands to make Snowflake object management and deployment smoother. Below are the key commands, explanations, and examples of how to use them.
 
 ### 1. `init`
 
@@ -24,7 +24,7 @@ The `init` command is responsible for initializing the Snowflake environment, da
 
 - **Usage**: 
 ```bash
-bobsled init -e <environment> -d <database> -s <schema>
+snowflow init -e <environment> -d <database> -s <schema>
 ```
 - **Options**:
   - `-e`: Environment 
@@ -37,7 +37,7 @@ The `deploy` command allows you to deploy Snowflake objects like databases and s
 
 - **Usage**: 
 ```bash
-bobsled deploy -e <environment> -d <database> -s <schema>
+snowflow deploy -e <environment> -d <database> -s <schema>
 ```
 - **Options**:
   - `-e`: Environment
@@ -50,7 +50,7 @@ The `clone` command allows cloning of Snowflake databases or schemas.
 
 - **Usage**:
 ```bash
-bobsled clone -e <environment> -sd <source_db> -ss <source_schema> -td <target_db> -ts <target_schema>
+snowflow clone -e <environment> -sd <source_db> -ss <source_schema> -td <target_db> -ts <target_schema>
 ```
 - **Options**:
   - `-sd`: Source database
@@ -64,7 +64,7 @@ The `run_script` command executes a specific SQL script in the provided Snowflak
 
 - **Usage**:
 ```bash
-bobsled run_script -e <environment> -d <database> -s <schema> -f <file_path>
+snowflow run_script -e <environment> -d <database> -s <schema> -f <file_path>
 ```
 - **Options**:
   - `-e`: Environment 
@@ -78,7 +78,7 @@ This command allows testing of a specific DAG (Directed Acyclic Graph) to verify
 
 - **Usage**:
 ```bash
-bobsled test_dag -e <environment> -d <database> -s <schema> -f <dag_file>
+snowflow test_dag -e <environment> -d <database> -s <schema> -f <dag_file>
 ```
 - **Options**:
   - `-e`: Environment
@@ -90,10 +90,11 @@ Each function has error handling for scenarios such as invalid environments or d
 
 ## Authentication Methods
 
-Bobsled supports two authentication methods for connecting to Snowflake:
+Snowflow supports two authentication methods for connecting to Snowflake:
 
 1. **Username and Password**
 2. **RSA Key-Pair Authentication**
+3. **SSO (Single Sign-On) with Token Caching**
 
 ### 1. Username and Password Authentication
 
@@ -101,7 +102,7 @@ This is the default and most straightforward authentication method. All the nece
 
 ### 2. RSA Key-Pair Authentication
 
-RSA Key-Pair Authentication is a more secure alternative to username/password. It requires generating a private-public key pair, configuring Snowflake to use your public key, and using your private key for authentication in Bobsled.
+RSA Key-Pair Authentication is a more secure alternative to username/password. It requires generating a private-public key pair, configuring Snowflake to use your public key, and using your private key for authentication in Snowflow.
 
 #### Steps to Set Up RSA Key-Pair Authentication:
 
@@ -129,19 +130,23 @@ RSA Key-Pair Authentication is a more secure alternative to username/password. I
    ```
 
 5. **Test the Connection:**
-   Once you have updated your `connections.toml` and added the public key to Snowflake, test the connection by running a Bobsled command:
+   Once you have updated your `connections.toml` and added the public key to Snowflake, test the connection by running a Snowflow command:
    ```bash
-   bobsled deploy -e <environment> -d <database> -s <schema>
+   snowflow deploy -e <environment> -d <database> -s <schema>
    ```
+
+### 3. SSO (Single Sign-On) with Token Caching
+
+This method uses a given Single Sign-On provider of your choice and securely caches a session token to reduce the need for repeated authentications. The first time you connect using SSO, Snowflow will authenticate via an external browser and store the session token in a secure cache file for future use. If the cached token is valid, Snowflow will use it for future connections. If not, it will re-authenticate through the browser, update the cache with a new token, and resume the connection. 
+
 
 ## Configuration Files
 
-Bobsled requires a few configuration files to define how it interacts with Snowflake, including environments and variable settings.
+Snowflow requires a few configuration files to define how it interacts with Snowflake, including environments and variable settings.
 
 ### 1. `connections.toml`
 
-The `connections.toml` file defines the connection settings for each environment, including Snowflake credentials and environment-specific details. The example configuration below shows the configuration setup for both user/password and RSA key-pair.
-
+The `connections.toml` file defines the connection settings for each environment, including Snowflake credentials and environment-specific details. The example configuration below shows the configuration setup for user/password, RSA key-pair and SSO - in that order.
 #### Example Configuration:
 ```toml
 [environment_name]
@@ -163,19 +168,28 @@ password = "your_password"
 database = "your_database"
 warehouse = "your_warehouse"
 role = "your_role"
+
+[evironment_name] 
+name = "user"
+account = "your_snowflake_account_url"
+user = "USERNAME"
+authenticator = "externalbrower"
+database = "your_database"
+warehouse = "your_warehouse"
+role = "your_role"
 ```
 
 ### 2. `query_variables.yaml`
 
-This file contains environment-specific configuration variables that Bobsled uses during deployments and to validate environment names during command execution. Bobsled requires a `query_variables.yaml` file to be present in the directory where you are running the app.
+This file contains environment-specific configuration variables that Snowflow uses during deployments and to validate environment names during command execution. Snowflow requires a `query_variables.yaml` file to be present in the directory where you are running the app.
 
 #### Example:
 ```yaml
-dev:
+branch_name (eg: dev):
   '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
 
-prd:
+branch_name (eg: prd):
   '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
 ```
@@ -198,7 +212,7 @@ pip install -r requirements.txt
 
 ### 3. Pipeline YAML File
 
-Bobsled can be integrated into CI/CD pipelines to automate the deployment process, manage different environments (such as development and production), and ensure continuous deployment to Snowflake. Below is an example of a YAML file used in an Azure DevOps pipeline. This file can be modified according to the specific needs of your project, such as using environment variables, custom branches, and deployment commands.
+Snowflow can be integrated into CI/CD pipelines to automate the deployment process, manage different environments (such as development and production), and ensure continuous deployment to Snowflake. Below is an example of a YAML file used in an Azure DevOps pipeline. This file can be modified according to the specific needs of your project, such as using environment variables, custom branches, and deployment commands.
 
 #### Example Azure DevOps Pipeline Configuration:
 ```
@@ -235,34 +249,34 @@ steps:
     sed -i 's|C:/Users/XYZ/rsa_key.der|/home/vsts/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
-# Install Python dependencies and Bobsled
+# Install Python dependencies and Snowflow
 - script: |
     pip install -r requirements.txt
-    pip install bobsled
-  displayName: 'Install dependencies and Bobsled'
+    pip install snowflow
+  displayName: 'Install dependencies and Snowflow'
 
-# Deploy the changes using Bobsled for the development branch
+# Deploy the changes using Snowflow for the development branch
 - task: Bash@3
-  displayName: 'Run Bobsled deployment for dev'
+  displayName: 'Run Snowflow deployment for dev'
   inputs:
     targetType: 'inline'
     script: |
-      bobsled deploy -e dev_environment -d your_database -s your_schema
+      snowflow deploy -e dev_environment -d your_database -s your_schema
   condition: eq(variables['Build.SourceBranchName'], 'dev')
 
-# Deploy the changes using Bobsled for the production branch
+# Deploy the changes using Snowflow for the production branch
 - task: Bash@3
-  displayName: 'Run Bobsled deployment for production'
+  displayName: 'Run Snowflow deployment for production'
   inputs:
     targetType: 'inline'
     script: |
-      bobsled deploy -e prd_environment -d your_database -s your_schema
+      snowflow deploy -e prd_environment -d your_database -s your_schema
   condition: eq(variables['Build.SourceBranchName'], 'prd')
 ```
 
 ### File Structure for SQL Scripts
 
-When deploying with Bobsled, your SQL scripts must be located in the following directory structure relative to your current working directory. For example, if you are deploying a schema called `test_schema` under a database called `demo`, Bobsled will look for the SQL scripts under:
+When deploying with Snowflow, your SQL scripts must be located in the following directory structure relative to your current working directory. For example, if you are deploying a schema called `test_schema` under a database called `demo`, Snowflow will look for the SQL scripts under:
 ```
 snowflake/databases/demo/schemas/test_schema/
 ```
@@ -275,4 +289,4 @@ Make sure to organize your SQL scripts according to this structure to ensure cor
 
 ## License
 
-Bobsled is licensed under the [BSD 3-Clause License]
+Snowflow is licensed under the [BSD 3-Clause License]

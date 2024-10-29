@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="bobsled",
-    version="0.1.19",
+    name="snowflow",
+    version="0.0.1",
     author="Thomas Garcia, Aryan Singh",
     author_email="tgarcia@svam.com, aryan.singh@svam.com",
-    description="Bobsled - A Snowflake Deployment Tool",
+    description="SnowFlow - A Snowflake Deployment Tool",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
@@ -19,7 +19,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'bobsled = bobsled.bobsled:main', 
+            'snowflow = snowflow.snowflow:main', 
         ],
     },
     classifiers=[

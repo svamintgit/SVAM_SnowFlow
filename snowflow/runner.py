@@ -4,6 +4,8 @@ import logging
 from . import scripts
 import os
 import toml
+import time
+import json
 
 class SnowflakeUser:
     def __init__(self, environment: str):
@@ -14,6 +16,7 @@ class SnowflakeUser:
         self.query_variables = self.environment_obj.query_variables
         self.config = self._load_toml_config()
         self.session = self._get_session()
+        self.token_cache_file = os.path.join(os.path.expanduser("~"), ".snowflake", "token_cache.json")
     
     def _get_connection_parameters(self, input_dict: dict) -> dict:
         connection_parameters =dict()
@@ -24,7 +27,7 @@ class SnowflakeUser:
                 connection_parameters[input_key]= input_dict[lookup_key]
             return connection_parameters
         else:
-            logging.error('could not find all requirement connection params')
+            logging.error('Could not find all required connection parameters')
             return {}
         
     def _load_toml_config(self) -> dict:
@@ -92,7 +95,15 @@ class SnowflakeUser:
 
     def _connect_with_sso(self, environment_config):
         try:
-            session_builder = Session.builder.configs({
+            if os.path.exists(self.token_cache_file):
+                with open(self.token_cache_file, "r") as cache_file:
+                    token_data = json.load(cache_file)
+                    if time.time() < token_data.get("expiry", 0):
+                        logging.debug("Using cached SSO token.")
+                        session_params = token_data["session_params"]
+                        return Session.builder.configs(session_params).create()
+
+            session_params = {
                 "account": environment_config["account"],
                 "user": environment_config["user"],
                 "authenticator": "externalbrowser",
@@ -100,10 +111,21 @@ class SnowflakeUser:
                 "schema": environment_config.get("schema"),
                 "warehouse": environment_config.get("warehouse"),  
                 "role": environment_config.get("role"),
-            })
-
-            return session_builder.create()
+            }
         
+            session = Session.builder.configs(session_params).create()
+
+            token_data = {
+                "session_params": session_params,
+                "expiry": time.time() + 3600  
+            }
+
+            os.makedirs(os.path.dirname(self.token_cache_file), exist_ok=True)
+            with open(self.token_cache_file, "w") as cache_file:
+                json.dump(token_data, cache_file)
+
+            return session
+
         except (ProgrammingError, DatabaseError) as db_error:
             logging.error(f"Snowflake connection error: {db_error}")
             raise
@@ -150,26 +172,32 @@ class SnowflakeUser:
             logging.error(f"Query: {query}")
             raise
         except Exception as e:
-            logging.error(f"Unexpected error during query execution: {e}")
-            logging.error(f"Query: {query}")
-            raise
+            logging.warning(f"Error during query execution: {e}. Skipping query execution.")
     
-    def run_queries(self, queries: list) -> list:
-        '''
-        executes a list of queries in order, returns a list of query output
-        '''
+    def run_queries(self, queries: list, object_type: str = "") -> list:
+        """
+        Executes a list of queries in order and returns a list of output results.
+        Logs and skips execution if no queries are provided.
+        """
         outp = []
-        for query in queries:
+        if not queries:
+            logging.debug(f"Skipping {object_type}, no queries to execute.")
+            return outp
+
+        for index, query in enumerate(queries):
             try:
-                outp.append(self.run_query(query))
+                logging.debug(f"Executing query {index + 1}/{len(queries)} for {object_type}: {query}")
+                result = self.run_query(query)
+                outp.append(result)
+                logging.debug(f"Query executed successfully: {result}")
             except (ProgrammingError, DatabaseError) as db_error:
-                logging.error(f"Programming query execution error: {db_error}")
-                logging.error(f"Query: {query}")
+                logging.error(f"Database error in {object_type} query execution: {db_error}")
+                logging.error(f"Offending Query: {query}")
                 raise
             except Exception as e:
-                logging.error(f"Unexpected error while executing query: {e}")
-                logging.error(f"Query: {query}")
-                raise
+                logging.warning(f"Unexpected error in {object_type} query execution: {e}. Skipping query.")
+    
+        logging.debug(f"Completed all queries for {object_type}, with {len(outp)} successful executions.")
         return outp
     
     def post_files(self, file_configs: list[dict]) -> list:

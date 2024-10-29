@@ -4,6 +4,7 @@ import logging
 import networkx as nx
 import sys
 import os
+import re
 
 class ScriptParser:
     def __init__(self, substitutions=dict()):
@@ -40,8 +41,8 @@ class ScriptParser:
             logging.error(f"YAML directory not found: {e}")
             raise
         except Exception as e:
-            logging.error(f"Unexpected error while retrieving YAML files: {e}")
-            raise
+            logging.warning(f"Error while retrieving YAML files: {e}. Skipping.")
+            return []
 
     def clean_query(self, query: str) -> str:
         '''
@@ -85,15 +86,6 @@ class ScriptParser:
 
     def read_clean_file(self, path: Path) -> str:
         return self.clean_query(self.read_file(path))
-    
-    # def read_file(self, path: Path) -> str:
-    #     try:
-    #         content = open(path).read()
-    #     except Exception as e:
-    #         logging.error(e)
-    #         return ''
-    #     else:
-    #         return content
 
     def read_file(self, path: Path) -> str:
         """
@@ -128,25 +120,6 @@ class ScriptParser:
         except Exception as e:
             logging.error(e)
             return []
-    
-
-    # def get_path_queries(self, path: Path, single_transaction: bool = False) -> list[str]:
-    #     '''
-    #     Loop over path, return contents of files in a list of queries
-    #     '''
-    #     try:
-    #         queries=[]
-    #         for f in path.glob("*.sql"):
-    #             if single_transaction:
-    #                 queries.append(self.read_clean_file(f))
-    #             else:
-    #                 queries.extend(self.read_file_queries(f))
-    #     except Exception as e:
-    #         logging.error(e)
-    #         return []
-    #     else:
-    #         logging.debug(queries)
-    #         return queries
 
     def get_path_queries(self, path: Path, single_transaction: bool = False) -> list[str]:
         """
@@ -173,7 +146,7 @@ class ScriptParser:
 class DirectoryHandler:
     def __init__(self):
         self.root_dir = os.getcwd()
-        self.sql_templates_path = Path(self.root_dir, 'bobsled','sql_templates')
+        self.sql_templates_path = Path(self.root_dir, 'snowflow','sql_templates')
 
     def mkdir(self, path: Path) -> Path:
         try:
@@ -197,10 +170,6 @@ class DirectoryHandler:
         Path(root, 'init.sql').touch()
         Path(root, 'grants.sql').touch()
         return True
-    
-    # def get_absolute_path(self, relative_path: str):
-    #     #given a path relative to the root as a str, return a Path object
-    #     return Path(self.root_dir, relative_path)
 
     def get_absolute_path(self, relative_path: str) -> Path:
         """
@@ -344,7 +313,6 @@ class SnowflakeSchema:
         self.sp = database.sp
         self.dh = database.dh
         self.sp.substitutions = self.sp.substitutions | self.query_variables
-        # self.schema_path = Path(self.database.path,'schemas',self.name)
         self.schema_path = Path(os.getcwd(), 'snowflake', 'databases', self.database.name, 'schemas', self.name)
 
         self.child_objects= ['file_formats', 'tables','streams','stages','views','tasks','dags','udfs', 'stored_procs', 'staged_files', 'post_deploy']
@@ -356,11 +324,92 @@ class SnowflakeSchema:
     def __repr__(self):
         return self.database.name+'.'+self.name
     
+    def _get_queries_or_empty(self, object_type: str) -> list[str]:
+        """
+        Method to get queries for object type
+        If the folder does not exist, returns an empty list
+        """
+        object_path = self.path_lookup.get(object_type)
+        if object_path and object_path.exists():
+            logging.debug(f"Fetching queries for {object_type}")
+            queries = self.sp.get_path_queries(object_path)
+            if queries:
+                return queries
+            else:
+                return []
+        else:
+            logging.debug(f"Skipping {object_type}, folder does not exist.")
+            return []
+        
+    def _extract_dependencies(self, sql_content: str) -> list[str]:
+        """
+        Parses SQL content to find dependencies
+        """
+        dependencies = set()
+    
+        # Regular expression to match table and view references after FROM or JOIN
+        pattern = re.compile(r'(?:FROM|JOIN)\s+([\w\.]+)', re.IGNORECASE)
+    
+        for match in pattern.finditer(sql_content):
+            dependency = match.group(1).strip()
+            if dependency: 
+                dependencies.add(dependency)
+    
+        return list(dependencies)
+
+    def get_ordered_views(self) -> list[str]:
+        """
+        Returns a list of views ordered by dependency
+        """
+        view_path = self.path_lookup.get('views')
+        if not view_path or not view_path.exists():
+            logging.debug("Skipping views, folder does not exist.")
+            return []
+
+        view_files = list(view_path.glob("*.sql"))
+        if not view_files:
+            logging.debug("Skipping views, no .sql files found.")
+            return []
+
+        dependency_graph = nx.DiGraph()
+
+        view_file_map = {view_file.stem: view_file for view_file in view_files}
+
+        for view_name, view_file in view_file_map.items():
+            sql_content = self.sp.read_file(view_file)
+            dependencies = self._extract_dependencies(sql_content)
+            dependency_graph.add_node(view_name)
+
+            for dependency in dependencies:
+                if dependency in view_file_map:
+                    dependency_graph.add_edge(dependency, view_name)
+                else:
+                    logging.debug(f"Dependency '{dependency}' not found in views. Skipping edge addition.")
+
+        try:
+            sorted_views = list(nx.topological_sort(dependency_graph))
+            logging.debug(f"Sorted views order: {sorted_views}")
+        except nx.NetworkXUnfeasible:
+            logging.error("Circular dependency detected in view definitions.")
+            return []
+
+        queries = []
+        for view_name in sorted_views:
+            view_file = view_file_map.get(view_name)
+            if view_file:
+                file_queries = self.sp.read_file_queries(view_file)
+                if file_queries:
+                    queries.extend(file_queries)
+                else:
+                    logging.debug(f"No queries found in file for view '{view_name}'. Skipping.")
+
+        return queries
+    
     def get_schema_init(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.schema_path,'init.sql'))
 
     def get_schema_grants(self) -> list[str]:
-        return self.sp.get_path_queries(Path(self.schema_path,'grants'))
+        return self._get_queries_or_empty('grants')
 
     def initialize(self):
         self.account.initialize()
@@ -369,31 +418,31 @@ class SnowflakeSchema:
         return True
     
     def get_file_formats(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['file_formats'])
+        return self._get_queries_or_empty('file_formats')
     
     def get_tables(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['tables'])
+        return self._get_queries_or_empty('tables')
 
     def get_streams(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['streams'])
+        return self._get_queries_or_empty('streams')
     
     def get_stages(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['stages'])
+        return self._get_queries_or_empty('stages')
     
     def get_views(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['views'])
+        return self.get_ordered_views()
     
     def get_tasks(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['tasks'])
+        return self._get_queries_or_empty('tasks')
     
     def get_udfs(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['udfs'])
+        return self._get_queries_or_empty('udfs')
     
     def get_stored_procs(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['stored_procs'], single_transaction=True)
+        return self.sp.get_path_queries(self.path_lookup.get('stored_procs'), single_transaction=True) if self.path_lookup.get('stored_procs') else []
     
     def get_post_deploy(self) -> list[str]:
-        return self.sp.get_path_queries(self.path_lookup['post_deploy'])
+        return self._get_queries_or_empty('post_deploy')
 
     def get_grants(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.schema_path,'grants.sql')) 
@@ -408,30 +457,37 @@ class SnowflakeSchema:
 
     def get_dag_objs(self):
         return [TaskDAG(cd, self) for cd in self.sp.get_path_yamls(self.path_lookup['dags'])]
-
+    
     def get_dag(self, file_name) -> list[str]:
-        curr_dag_path = Path(self.path_lookup['dags'],file_name)
-        logging.debug(curr_dag_path)
-        cd = self.sp.parse_yaml_file(curr_dag_path)
-        dag = TaskDAG(cd, self)
-        return dag.get_all_queries()
-
+        curr_dag_path = Path(self.path_lookup['dags'], file_name) if self.path_lookup.get('dags') else None
+        if curr_dag_path:
+            logging.debug(curr_dag_path)
+            cd = self.sp.parse_yaml_file(curr_dag_path)
+            dag = TaskDAG(cd, self)
+            return dag.get_all_queries()
+        else:
+            logging.debug(f"Skipping dag {file_name}, folder does not exist.")
+            return []
+    
     def get_staged_files(self) -> list[dict]:
-        '''
+        """
         Return a list of dicts with the format {'local_path': ,'stage_path':}
         where stage is a stage name that corresponds to a subfolder name in the staged_files
-        and path is the filename and path within the folder
-        '''
-        outp=[]
-        staged_files_path= Path(self.schema_path,'staged_files')
-        stages = [p for p in list(staged_files_path.glob('*')) if p.is_dir()]
-        for stage in stages:
-            local_stage = Path(staged_files_path, stage)
-            files = [f for f in list(stage.glob('**/*')) if f.is_file()]
-            for file in files:
-                local_path =  str(file)
-                stage_path = '@'+stage.name+'/'+file.relative_to(local_stage).parent.as_posix()
-                outp.append({'local_path':local_path,'stage_path':stage_path})
+        and path is the filename and path within the folder.
+        """
+        outp = []
+        staged_files_path = Path(self.schema_path, 'staged_files')
+        if staged_files_path.exists():
+            stages = [p for p in list(staged_files_path.glob('*')) if p.is_dir()]
+            for stage in stages:
+                local_stage = Path(staged_files_path, stage)
+                files = [f for f in list(stage.glob('**/*')) if f.is_file()]
+                for file in files:
+                    local_path = str(file)
+                    stage_path = '@' + stage.name + '/' + file.relative_to(local_stage).parent.as_posix()
+                    outp.append({'local_path': local_path, 'stage_path': stage_path})
+        else:
+            logging.debug(f"Skipping staged files, folder does not exist.")
         return outp
 
 class TaskDAG:
@@ -494,7 +550,7 @@ class TaskDAG:
         keys = ['ROOT_TASK','INITIAL_WAREHOUSE_SIZE','ALLOW_OVERLAPPING_EXECUTION','WAREHOUSE']
         for key in keys:
             var_dict['!!!'+key+'!!!'] = self.config_dict.get(key)
-        logging.info(var_dict)
+        logging.debug(var_dict)
         return var_dict
     
     def _get_task_template(self) -> str:
@@ -510,7 +566,7 @@ class TaskDAG:
             logging.error('Could not determine template to use. Please specify a variable of either INITIAL_WAREHOUSE_SIZE or WAREHOUSE')
         else:
             logging.error('Could not determine template to use. Please specify a variable of either INITIAL_WAREHOUSE_SIZE or WAREHOUSE')
-        logging.info(template)
+        logging.debug(template)
         return template
 
 class Task:

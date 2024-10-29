@@ -10,7 +10,7 @@ class Argument:
         self.required = required
         self.help = help
 
-class BobsledCommand:
+class SnowFlowCommand:
     def __init__(self) -> None:
         self.name = None
         self.help = None
@@ -40,13 +40,13 @@ class Deploy:
             user = runner.SnowflakeUser(self.environment)
             self.run_global_init(user)
             if args.get('d')==None:
-                logging.info('Bobsled deploy account')
+                logging.info('Snowflow deploy account')
                 self.account(user)
             elif args.get('s')==None:
-                logging.info('Bobsled deploy db')
+                logging.info('Snowflow deploy db')
                 self.database(user, args.get('d'))
             else:
-                logging.info('Bobsled deploy schema')
+                logging.info('Snowflow deploy schema')
                 self.schema(user, args.get('d'), args.get('s'))
         except ValueError as ve:
             logging.error(f"Deployment error: {ve}")
@@ -56,10 +56,10 @@ class Deploy:
             raise
         except Exception as e:
             logging.error(f"Unexpected error during deployment: {e}")
-            raise
+            logging.warning("Continuing execution; non-critical error")
 
     def account(self, user: runner.SnowflakeUser) -> None:
-        user.session.query_tag= 'Bobsled deploy account'
+        user.session.query_tag= 'Snowflow deploy account'
         acct = scripts.SnowflakeAcct(self.environment)
         user.run_queries(acct.get_roles())
         user.run_queries(acct.get_warehouses())
@@ -69,16 +69,16 @@ class Deploy:
         logging.info('Account deployed')
 
     def database(self, user: runner.SnowflakeUser, db_name:str) -> None:
-        logging.info('Bobsled deploy db')
-        user.session.query_tag= 'Bobsled deploy db- '+db_name
+        logging.info('Snowflow Deploy Database')
+        user.session.query_tag= 'Snowflow Deploy Database: '+db_name
         acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         user.run_queries(db.get_db_init())
-        logging.info('DB Deployed')
+        logging.info('Database Deployed')
 
     def schema(self, user: runner.SnowflakeUser, db_name:str, schema_name: str) -> None:
-        logging.info('Bobsled deploy schema')
-        user.session.query_tag= 'Bobsled deploy schema- '+db_name+'.'+schema_name
+        logging.info('Snowflow Deploy Schema')
+        user.session.query_tag= 'Snowflow Deploy Schema: '+db_name+'.'+schema_name
         acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
@@ -87,19 +87,19 @@ class Deploy:
         user.run_queries(schema_queries)
         user.session.use_schema(schema_name)
 
-        user.run_queries(schema.get_file_formats())
-        user.run_queries(schema.get_stages())
+        user.run_queries(schema.get_file_formats(), object_type = "file_formats")
+        user.run_queries(schema.get_stages(), object_type = "stages")
         user.post_files(schema.get_staged_files())
-        user.run_queries(schema.get_udfs())
-        user.run_queries(schema.get_tables())
-        user.run_queries(schema.get_streams())
-        user.run_queries(schema.get_views())
-        user.run_queries(schema.get_stored_procs())
-        user.run_queries(schema.get_tasks())
-        user.run_queries(schema.get_dags())
-        user.run_queries(schema.get_post_deploy())
-        user.run_queries(schema.get_grants())
-        logging.info('Schema deployed')
+        user.run_queries(schema.get_udfs(), object_type = "udfs")
+        user.run_queries(schema.get_tables(), object_type = "tables")
+        user.run_queries(schema.get_streams(), object_type = "streams")
+        user.run_queries(schema.get_views(), object_type = "views")
+        user.run_queries(schema.get_stored_procs(), object_type = "stored_procs")
+        user.run_queries(schema.get_tasks(), object_type = "tasks")
+        user.run_queries(schema.get_dags(), object_type = "dags")
+        user.run_queries(schema.get_post_deploy(), object_type = "post_deploy")
+        user.run_queries(schema.get_grants(), object_type = "grants")
+        logging.info('Schema Deployed')
 
     def run_global_init(self, user: runner.SnowflakeUser) -> None:
         try:
@@ -146,13 +146,13 @@ class Init:
             if not self.environment:
                 raise ValueError("Environment must be specified. Please provide a valid environment.")
             if not db_name:
-                logging.info('Bobsled initialize account')
+                logging.info('Snowflow initialize account')
                 self.account(self.environment)
             elif not schema_name:
-                logging.info('Bobsled initialize db')
+                logging.info('Snowflow initialize database')
                 self.database(db_name)
             else:
-                logging.info('Bobsled initialize schema')
+                logging.info('Snowflow initialize schema')
                 self.schema(db_name, schema_name)
         except KeyError as ve:
             logging.error(f"Key error: {ve}. Check if database or schema name is provided correctly.")
@@ -263,8 +263,7 @@ class RunScript:
             logging.error(f"Database error while running script: {de}")
             raise
         except Exception as e:
-            logging.error(f"Unexpected error during script execution: {e}")
-            raise
+            logging.warning(f"Error during script execution: {e}. Skipping the script.")
 
 class TestDAG:
     def __init__(self, environment: str) -> None:

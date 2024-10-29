@@ -21,21 +21,21 @@ class ArgHandler:
         return mapper
 
     def _get_parser(self) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(description='The Bobsled command to execute')
+        parser = argparse.ArgumentParser(description='The SnowFlow command to execute')
         subparsers = parser.add_subparsers(help='parameters for the command', dest='cmd')
         for command in self.list_mapper_commands():
             logging.debug(command)
             self.add_command_parser(subparsers, command)
         return parser
 
-    def add_command_parser(self, subparsers: argparse._SubParsersAction, command: commands.BobsledCommand) -> None:
+    def add_command_parser(self, subparsers: argparse._SubParsersAction, command: commands.SnowFlowCommand) -> None:
         logging.debug(command.name)
         parser = subparsers.add_parser(command.name, help=command.help)
         for arg in command.args:
             logging.debug(arg.option)
             parser.add_argument(arg.option, required=arg.required, help=arg.help)
 
-    def list_mapper_commands(self) -> list[commands.BobsledCommand]:
+    def list_mapper_commands(self) -> list[commands.SnowFlowCommand]:
         return list(self.mapper.values())
 
     def get_command(self, parser) -> str:
@@ -67,7 +67,7 @@ def main():
 
     # Parse the global arguments like environment
     global_parser = argparse.ArgumentParser(
-        description="Bobsled Deployment Tool\n"
+        description="SnowFlow Deployment Tool\n"
                     "Required: Please use -e to specify the environment.",
         formatter_class=argparse.RawTextHelpFormatter
     )
