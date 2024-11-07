@@ -20,10 +20,15 @@ class ScriptParser:
                 string_file.replace('\t','  ')
                 string_file = self.substitute_vars(string_file)
                 dict = yaml.safe_load(string_file)
+            
+            if dict is None:
+                logging.debug(f"YAML file at {file_path} is empty")
+                return {}
+            
             return dict
         except FileNotFoundError as e:
             logging.error(f"YAML file not found at path: {file_path}. Error: {e}")
-            raise
+            return {}
         except yaml.YAMLError as e:
             logging.error(f"YAML parsing error in {file_path}. Error: {e}")
             raise
