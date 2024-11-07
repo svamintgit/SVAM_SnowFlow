@@ -209,8 +209,8 @@ class Environment:
                 logging.info("query_variables.yaml not found. Proceeding without substitutions.")
                 return {}
 
-            raw_vars = self.sp.parse_yaml_file(local_path)
-            if not raw_vars or env not in raw_vars:
+            raw_vars = self.sp.parse_yaml_file(local_path) or {}
+            if env not in raw_vars:
                 logging.info(f"No variables found for environment '{env}' in query_variables.yaml.")
                 return {}
 
@@ -224,8 +224,6 @@ class Environment:
         except Exception as e:
             logging.error(f"Unexpected error in get_query_variables: {e}")
             raise
-
-        return {}
 
     def initialize(self):
         '''
