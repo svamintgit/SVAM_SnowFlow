@@ -15,13 +15,19 @@ class ScriptParser:
         Load a yaml file as a python dictionary
         '''
         try:
+            if not file_path.exists():
+                logging.warning(f"YAML file {file_path} does not exist.")
+                return {}
+            logging.info(f"Opening YAML file at {file_path}")
             with open(file_path, 'r') as raw_yaml:
-                logging.info(f"Opened YAML file at {file_path}")
                 string_file = raw_yaml.read()
                 string_file = string_file.replace('\t','  ')
                 logging.info(f"File content before substitution: {string_file}")
                 string_file = self.substitute_vars(string_file)
-                data = yaml.safe_load(string_file) or {}
+                data = yaml.safe_load(string_file)
+                if data is None:
+                    logging.warning("Parsed YAML data is None.")
+                    return {}
                 logging.info(f"Parsed YAML data: {data}")
                 return data
         except FileNotFoundError as e:
@@ -29,10 +35,10 @@ class ScriptParser:
             return {}
         except yaml.YAMLError as e:
             logging.error(f"YAML parsing error in {file_path}. Error: {e}")
-            raise
+            return {}
         except Exception as e:
             logging.error(f"Unexpected error while parsing YAML file: {e}")
-            raise
+            return {}
 
     def get_path_yamls(self, path: Path) -> list[dict]:
         try:
@@ -209,13 +215,17 @@ class Environment:
             logging.debug(f"Looking for query variables in: {local_path}")
 
             if not os.path.exists(local_path):
-                logging.info("query_variables.yaml not found. Proceeding without substitutions.")
+                logging.info("query_variables.yaml not found.")
                 return {}
 
             raw_vars = self.sp.parse_yaml_file(local_path)
 
             logging.info(f"Contents of raw_vars after parsing: {raw_vars}")
         
+            if raw_vars is None:
+                logging.info("query_variables.yaml is empty.")
+                raw_vars = {}
+
             if not raw_vars:
                 logging.info("query_variables.yaml is empty.")
                 return {}
