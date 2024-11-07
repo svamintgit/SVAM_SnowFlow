@@ -19,10 +19,8 @@ class ScriptParser:
                 string_file = raw_yaml.read()
                 string_file = string_file.replace('\t','  ')
                 string_file = self.substitute_vars(string_file)
-                data = yaml.safe_load(string_file)
-                if data is None:
-                    logging.info(f"{file_path} is empty.")
-                    return {}
+                data = yaml.safe_load(string_file) or {}
+                logging.info(f"Parsed YAML data from {file_path}: {data}")
                 return data
         except FileNotFoundError as e:
             logging.error(f"YAML file not found at path: {file_path}. Error: {e}")
@@ -212,11 +210,7 @@ class Environment:
                 logging.info("query_variables.yaml not found. Proceeding without substitutions.")
                 return {}
 
-            raw_vars = self.sp.parse_yaml_file(local_path)
-
-            if not isinstance(raw_vars, dict):  
-                logging.info("query_variables.yaml is empty.")
-                return {}
+            raw_vars = self.sp.parse_yaml_file(local_path) or {}
         
             if env not in raw_vars:
                 logging.info(f"No variables found for environment '{env}' in query_variables.yaml.")
