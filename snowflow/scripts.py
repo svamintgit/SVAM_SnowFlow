@@ -15,15 +15,14 @@ class ScriptParser:
         Load a yaml file as a python dictionary
         '''
         try:
-            if not file_path.exists():
-                logging.warning(f"YAML file {file_path} does not exist.")
-                return {}
-            logging.info(f"Opening YAML file at {file_path}")
+            logging.info(f"Opening YAML file at: {file_path}")
             with open(file_path, 'r') as raw_yaml:
                 string_file = raw_yaml.read()
+                logging.info(f"Raw content read from {file_path}: {string_file}")
                 string_file = string_file.replace('\t','  ')
                 logging.info(f"File content before substitution: {string_file}")
                 string_file = self.substitute_vars(string_file)
+                logging.info(f"Content after substitution: {string_file}")
                 data = yaml.safe_load(string_file)
                 if data is None:
                     logging.warning("Parsed YAML data is None.")
