@@ -9,7 +9,7 @@ class ArgHandler:
         self.parser = self._get_parser()
     
     def _get_mapper(self) -> dict:
-        # Map command names to their classes
+        # Map Command Names to their classes
         mapper = {
             'deploy': commands.Deploy,
             'init': commands.Init,

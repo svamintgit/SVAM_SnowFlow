@@ -21,7 +21,7 @@ class SnowflakeUser:
 
     def _validate_connection_parameters(self):
         """
-        Check for essential connection parameters and warn if database is missing
+        Check for listed connection parameters and warn if database is missing
         """
 
         environment_config = self.config.get(self.environment, {})

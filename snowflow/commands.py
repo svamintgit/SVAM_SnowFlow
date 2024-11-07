@@ -195,7 +195,7 @@ class Clone:
             td= args.get('td')
         
             if ss==None and ts==None:
-                #clone db
+                # Clone db
                 query = 'create or replace database '+td+ ' clone '+sd
             elif bool(ss)!=bool(ts):
                 # If we got one schema instead of two

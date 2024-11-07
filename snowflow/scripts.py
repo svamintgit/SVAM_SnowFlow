@@ -118,7 +118,7 @@ class ScriptParser:
     
     def read_file_queries(self, path: Path, single_transaction=False) -> list[str]:
         '''
-        read a sql file that can contain multiple queries
+        Read a sql file that can contain multiple queries
         '''
         try:
             if single_transaction:
