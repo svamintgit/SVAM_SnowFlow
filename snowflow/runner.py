@@ -13,10 +13,30 @@ class SnowflakeUser:
             raise ValueError("Environment not specified. Please provide a valid environment.")
         self.environment = environment
         self.environment_obj = scripts.Environment(environment) 
-        self.query_variables = self.environment_obj.query_variables
+        self.query_variables = self.environment_obj.query_variables or {}
         self.config = self._load_toml_config()
+        self._validate_connection_parameters()
         self.session = self._get_session()
         self.token_cache_file = os.path.join(os.path.expanduser("~"), ".snowflake", "token_cache.json")
+
+    def _validate_connection_parameters(self):
+        """
+        Check for essential connection parameters and warn if database is missing
+        """
+
+        environment_config = self.config.get(self.environment, {})
+
+        required_fields = ["account", "role", "warehouse"]
+        missing_fields = [field for field in required_fields if not environment_config.get(field)]
+        
+        if not environment_config.get("database"):
+            logging.warning("No 'database' specified in the connection.")
+        else:
+            required_fields.append("database")
+
+        if missing_fields:
+            missing_str = ", ".join(missing_fields)
+            raise ValueError(f"Missing required connection parameters: {missing_str}")
     
     def _get_connection_parameters(self, input_dict: dict) -> dict:
         connection_parameters =dict()
@@ -139,7 +159,9 @@ class SnowflakeUser:
             if not environment_config:
                 raise ValueError(f"Environment '{self.environment}' not found in the TOML file.")
 
-            logging.info(f"Loaded configuration for {self.environment}: {self.config}")
+            e_config = self.config.get(self.environment, {})
+            log_config = {key: e_config.get(key) for key in ['user', 'database', 'warehouse', 'role']}
+            logging.info(f"Loaded configuration for {self.environment}: {log_config}")
 
             if "private_key_path" in environment_config:
                 return self._connect_with_rsa(environment_config)
@@ -172,7 +194,7 @@ class SnowflakeUser:
             logging.error(f"Query: {query}")
             raise
         except Exception as e:
-            logging.warning(f"Error during query execution: {e}. Skipping query execution.")
+            logging.error(f"Error during query execution: {e}. Query: {query}. Skipping query execution.")
     
     def run_queries(self, queries: list, object_type: str = "") -> list:
         """
@@ -192,10 +214,10 @@ class SnowflakeUser:
                 logging.debug(f"Query executed successfully: {result}")
             except (ProgrammingError, DatabaseError) as db_error:
                 logging.error(f"Database error in {object_type} query execution: {db_error}")
-                logging.error(f"Offending Query: {query}")
+                logging.error(f"Query: {query}")
                 raise
             except Exception as e:
-                logging.warning(f"Unexpected error in {object_type} query execution: {e}. Skipping query.")
+                logging.error(f"Unexpected error in {object_type} query execution: {e}. Query: {query}. Skipping query.")
     
         logging.debug(f"Completed all queries for {object_type}, with {len(outp)} successful executions.")
         return outp

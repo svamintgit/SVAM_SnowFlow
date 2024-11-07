@@ -23,19 +23,24 @@ class SnowFlowCommand:
         pass
 
 class Deploy:
-    def __init__(self, environment: str) -> None:
-        self.name = 'deploy'
-        self.help = 'Specify no options to deploy account objects, just a db to deploy database objects, or a db and schema to deploy a schema. The account and database actually used are specified in the connection parameters  '
-        self.args = self.get_args()
-        self.environment = environment
+    help = 'Deploy account, database, or schema objects. Requires -e to specify the environment.'
+    args = [
+        Argument('-d', False, 'Specify Database name - Should match the folder'),
+        Argument('-s', False, 'Specify Schema name - Should match the folder')
+    ]
 
-    def get_args(self) -> list[Argument]:
-        args = []
-        args.append(Argument('-d', False, 'database name- should match the folder'))
-        args.append(Argument('-s', False, 'schema name- should match the folder'))
-        return args
+    def __init__(self, environment: str = None) -> None:
+        self.name = 'Deploy'
+        self.environment = environment
+        self.args = self.get_args()
+    
+    @classmethod
+    def get_args(cls):
+        return cls.args
     
     def run(self, args: dict) -> None:
+        if self.environment is None:
+            raise ValueError("The '-e' argument is required for 'deploy' command.")
         try:
             user = runner.SnowflakeUser(self.environment)
             self.run_global_init(user)
@@ -116,38 +121,27 @@ class Deploy:
             raise
 
 class Init:
-    def __init__(self, environment: str) -> None:
+    help = 'Initialize folder structure for account, database, or schema. Does not require -e.'
+    args = [
+        Argument('-d', False, 'Specify Database name for initialization (optional)'),
+        Argument('-s', False, 'Specify Schema name for initialization (optional)')
+    ]
+
+    def __init__(self) -> None:
         self.name = 'init'
-        self.help = 'initialize folder for account, database, or schema'
-        self.args = self.get_args()
-        self.environment = environment
-        self._validate_environment()
 
-    def _validate_environment(self):
-        try:
-            _ = scripts.Environment(self.environment)
-        except ValueError as ve:
-            logging.error(f"Invalid environment: {self.environment}. Error: {ve}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error during environment validation: {e}")
-            raise  
-
-    def get_args(self) -> list[Argument]:
-        args = []
-        args.append(Argument('-d', False, 'database name'))
-        args.append(Argument('-s', False, 'schema name'))
-        return args
+    @classmethod
+    def get_args(cls):
+        return cls.args
     
     def run(self, args: dict) -> None:
         try:
             db_name = args.get('d')
             schema_name = args.get('s')
-            if not self.environment:
-                raise ValueError("Environment must be specified. Please provide a valid environment.")
+    
             if not db_name:
                 logging.info('Snowflow initialize account')
-                self.account(self.environment)
+                self.account()
             elif not schema_name:
                 logging.info('Snowflow initialize database')
                 self.database(db_name)
@@ -162,34 +156,36 @@ class Init:
             raise
 
     def account(self) -> None:
-        acct = scripts.SnowflakeAcct(self.environment)
+        acct = scripts.SnowflakeAcct()
         logging.info(acct.initialize())
 
     def database(self, db_name:str) -> None:
-        acct = scripts.SnowflakeAcct(self.environment)
+        acct = scripts.SnowflakeAcct()
         db = scripts.SnowflakeDB(db_name,acct)
         logging.info(db.initialize())
 
     def schema(self, db_name:str, schema_name: str) -> None:
-        acct = scripts.SnowflakeAcct(self.environment)
+        acct = scripts.SnowflakeAcct()
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
         logging.info(schema.initialize())
 
 class Clone:
-    def __init__(self, environment: str) -> None:
-        self.name = 'clone'
-        self.help = 'clone a database or schema. specify just the database to clone the database, specify schema to clone a schema'
-        self.args = self.get_args()
+    help = 'Clone a Database or Schema. Specify just the database to clone the database. Specify schema to clone a schema. Requires -e to specify the environment.'
+    args = [
+        Argument('-sd', True, 'Source Database name'),
+        Argument('-ss', False, 'Source Schema name. Specify to clone a schema'),
+        Argument('-td', True, 'Target Database name'),
+        Argument('-ts', False, 'Target Schema name. Specify to clone a schema')
+    ]
+
+    def __init__(self, environment: str = None) -> None:
+        self.name = 'init'
         self.environment = environment
 
-    def get_args(self) -> list[Argument]:
-        args = []
-        args.append(Argument('-sd', True, 'source database name'))
-        args.append(Argument('-ss', False, 'source schema name. specify to clone a schema'))
-        args.append(Argument('-td', True, 'target database name'))
-        args.append(Argument('-ts', False, 'target schema name. specify to clone a schema'))
-        return args
+    @classmethod
+    def get_args(cls):
+        return cls.args
     
     def run(self, args: dict) -> None:
         try:
@@ -227,18 +223,20 @@ class Clone:
             raise
 
 class RunScript:
-    def __init__(self, environment: str) -> None:
-        self.name = 'run_script'
-        self.help = 'run a specific SQL script'
-        self.args = self.get_args()
+    help = 'Run a specific SQL script. Requires -e to specify the environment.'
+    args = [
+        Argument('-d', False, 'Database name. Specified in a use_database statement'),
+        Argument('-s', False, 'Schema name. Specified in a use_schema statement'),
+        Argument('-f', True, 'Script Path relative to the Root folder')
+    ]
+
+    def __init__(self, environment: str = None) -> None:
+        self.name = 'init'
         self.environment = environment
 
-    def get_args(self) -> list[Argument]:
-        args = []
-        args.append(Argument('-d', False, 'database name. specified in a use_database statement'))
-        args.append(Argument('-s', False, 'schema name. specified in a use_schema statement'))
-        args.append(Argument('-f', True, 'script path relative to the git root folder'))        
-        return args
+    @classmethod
+    def get_args(cls):
+        return cls.args
     
     def run(self, args: dict) -> None:
         try:
@@ -266,18 +264,20 @@ class RunScript:
             logging.warning(f"Error during script execution: {e}. Skipping the script.")
 
 class TestDAG:
-    def __init__(self, environment: str) -> None:
-        self.name = 'test_dag'
-        self.help = 'Test run a DAG file'
-        self.args = self.get_args()
+    help = 'Test run a DAG file. Requires -e to specify the environment.'
+    args = [
+        Argument('-d', True, 'Database name'),
+        Argument('-s', True, 'Schema name'),
+        Argument('-f', True, 'DAG file name relative to DAG folder')
+    ]
+
+    def __init__(self, environment: str = None) -> None:
+        self.name = 'init'
         self.environment = environment
 
-    def get_args(self) -> list[Argument]:
-        args = []
-        args.append(Argument('-d', True, 'database name'))
-        args.append(Argument('-s', True, 'schema name'))
-        args.append(Argument('-f', True, 'dag file name relative to dags folder'))
-        return args
+    @classmethod
+    def get_args(cls):
+        return cls.args
     
     def run(self, args: dict) -> None:
         database= args.get('d')

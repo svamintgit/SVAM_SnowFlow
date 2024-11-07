@@ -8,7 +8,7 @@ import re
 
 class ScriptParser:
     def __init__(self, substitutions=dict()):
-        self.substitutions: dict = substitutions
+        self.substitutions: dict = substitutions or {}
 
     def parse_yaml_file(self, file_path: Path) -> dict:
         '''
@@ -54,8 +54,9 @@ class ScriptParser:
 
     def substitute_vars(self, query: str) -> str:
         try:
-            for var, val in self.substitutions.items():
-                query= query.replace(var, str(val))
+            if self.substitutions:
+                for var, val in self.substitutions.items():
+                    query = query.replace(var, str(val))
             return query
         except TypeError as te:
             logging.error(f"TypeError in substitute_vars: {te}. Substitutions: {self.substitutions}")
@@ -150,7 +151,7 @@ class DirectoryHandler:
 
     def mkdir(self, path: Path) -> Path:
         try:
-            logging.info('Making the dir if not exists '+str(path))
+            logging.info('Making the directory if not exists: ' + str(path))
             path.mkdir(parents=False, exist_ok=True)
             return path
         except FileNotFoundError as e:
@@ -169,6 +170,17 @@ class DirectoryHandler:
             self.mkdir(path)
         Path(root, 'init.sql').touch()
         Path(root, 'grants.sql').touch()
+        
+        project_root = Path(self.root_dir) 
+        query_vars_file = project_root / 'query_variables.yaml'
+
+        if not query_vars_file.exists():
+            try:
+                query_vars_file.touch()
+                logging.info("Making query_variables.yaml if not exists: " + str(project_root))
+            except Exception as e:
+                logging.error(f"Failed to create query_variables.yaml: {e}")
+
         return True
 
     def get_absolute_path(self, relative_path: str) -> Path:
@@ -186,25 +198,26 @@ class Environment:
         self.query_variables_file = 'query_variables.yaml'
         self.env_var = environment  
         self.query_variables = self.get_query_variables(self.env_var) 
-        self.sp.substitutions = self.query_variables
+        self.sp.substitutions = self.query_variables or {}
 
     def get_query_variables(self, env):
         try:
             local_path = os.path.join(os.getcwd(), 'query_variables.yaml')
-            logging.info(f"Looking for query variables in: {local_path}")
+            logging.debug(f"Looking for query variables in: {local_path}")
 
             if not os.path.exists(local_path):
-                raise FileNotFoundError(f"query_variables.yaml not found at {local_path}. Please create this file with the appropriate variables for your environment.")
+                logging.info("query_variables.yaml not found. Proceeding without substitutions.")
+                return {}
 
             raw_vars = self.sp.parse_yaml_file(local_path)
-            if env not in raw_vars:
-                raise ValueError(f"Environment '{env}' is not defined in the query variables file.")
+            if not raw_vars or env not in raw_vars:
+                logging.info(f"No variables found for environment '{env}' in query_variables.yaml.")
+                return {}
 
             logging.info(f"Query variables found for environment '{env}': {raw_vars[env]}")
             return raw_vars[env]
         except FileNotFoundError as e:
-            logging.error(f"Query variables file not found: {e}")
-            raise
+            logging.info(f"Query variables file not found: {e}. Proceeding without substitutions.")
         except yaml.YAMLError as e:
             logging.error(f"Error in parsing YAML for query variables: {e}")
             raise
@@ -222,19 +235,23 @@ class SnowflakeAcct:
     '''
     Provides an interface between the repo files and a Snowflake account 
     '''
-    def __init__(self, environment: str) -> None:
-        if not environment:
-            raise ValueError("Environment not specified. Please provide a valid environment.")
-        self.environment = Environment(environment)
-        self.sp = self.environment.sp
-        self.dh = self.environment.dh
-        self.env_dir= Path(os.getcwd(), 'snowflake')
-        self.child_objects= ['databases', 'integrations', 'roles','warehouses', 'network_rules', 'network_policies']
+    def __init__(self, environment: str = None) -> None:
+        if environment:
+            self.environment = Environment(environment)
+            self.sp = self.environment.sp
+            self.dh = self.environment.dh
+        else:
+            self.environment = None
+            self.sp = ScriptParser()
+            self.dh = DirectoryHandler() 
+        
+        self.env_dir = Path(os.getcwd(), 'snowflake')
+        self.child_objects = ['databases', 'integrations', 'roles', 'warehouses', 'network_rules', 'network_policies']
         self.child_lookup = self.dh.get_path_lookup(self.env_dir, self.child_objects)
 
     def initialize(self) -> None:
-        logging.info(self.dh.initialize_directory(self.env_dir, self.child_lookup))
-        logging.info(Path(self.env_dir,self.environment.query_variables_file).touch())
+        Path(self.env_dir, 'init.sql').touch()
+        Path(self.env_dir, 'grants.sql').touch()
     
     def get_roles(self) -> list[str]:
         return self.sp.get_path_queries(self.child_lookup['roles'])
@@ -269,7 +286,6 @@ class SnowflakeDB:
         self.name=name
         self.dh = account.dh
 
-        # self.path = Path(self.account.env_dir, 'databases',self.name)
         self.path = Path(os.getcwd(), 'snowflake', 'databases', self.name)
         self.child_objects= ['schemas', 'dml']
         self.path_lookup = self.dh.get_path_lookup(self.path, self.child_objects)
@@ -305,16 +321,21 @@ class SnowflakeDB:
 
 class SnowflakeSchema:
     def __init__(self, name: str, database: SnowflakeDB):
-        self.name=name
+        self.name = name
         self.database = database
         self.account= self.database.account
         self.environment = self.account.environment
-        self.query_variables= self.environment.query_variables
-        self.sp = database.sp
-        self.dh = database.dh
-        self.sp.substitutions = self.sp.substitutions | self.query_variables
-        self.schema_path = Path(os.getcwd(), 'snowflake', 'databases', self.database.name, 'schemas', self.name)
 
+        if self.environment:
+            self.query_variables = self.environment.query_variables
+            self.sp = database.sp
+            self.sp.substitutions = self.sp.substitutions | self.query_variables
+        else:
+            self.query_variables = {}
+            self.sp = ScriptParser()
+        
+        self.dh = database.dh
+        self.schema_path = Path(os.getcwd(), 'snowflake', 'databases', self.database.name, 'schemas', self.name)
         self.child_objects= ['file_formats', 'tables','streams','stages','views','tasks','dags','udfs', 'stored_procs', 'staged_files', 'post_deploy']
         self.path_lookup = self.dh.get_path_lookup(self.schema_path, self.child_objects)
     
@@ -341,68 +362,26 @@ class SnowflakeSchema:
             logging.debug(f"Skipping {object_type}, folder does not exist.")
             return []
         
-    def _extract_dependencies(self, sql_content: str) -> list[str]:
-        """
-        Parses SQL content to find dependencies
-        """
-        dependencies = set()
     
-        # Regular expression to match table and view references after FROM or JOIN
-        pattern = re.compile(r'(?:FROM|JOIN)\s+([\w\.]+)', re.IGNORECASE)
-    
-        for match in pattern.finditer(sql_content):
-            dependency = match.group(1).strip()
-            if dependency: 
-                dependencies.add(dependency)
-    
-        return list(dependencies)
-
     def get_ordered_views(self) -> list[str]:
         """
-        Returns a list of views ordered by dependency
+        Returns a list of view queries in order, based on file name.
         """
         view_path = self.path_lookup.get('views')
         if not view_path or not view_path.exists():
             logging.debug("Skipping views, folder does not exist.")
             return []
 
-        view_files = list(view_path.glob("*.sql"))
-        if not view_files:
-            logging.debug("Skipping views, no .sql files found.")
-            return []
-
-        dependency_graph = nx.DiGraph()
-
-        view_file_map = {view_file.stem: view_file for view_file in view_files}
-
-        for view_name, view_file in view_file_map.items():
-            sql_content = self.sp.read_file(view_file)
-            dependencies = self._extract_dependencies(sql_content)
-            dependency_graph.add_node(view_name)
-
-            for dependency in dependencies:
-                if dependency in view_file_map:
-                    dependency_graph.add_edge(dependency, view_name)
-                else:
-                    logging.debug(f"Dependency '{dependency}' not found in views. Skipping edge addition.")
-
-        try:
-            sorted_views = list(nx.topological_sort(dependency_graph))
-            logging.debug(f"Sorted views order: {sorted_views}")
-        except nx.NetworkXUnfeasible:
-            logging.error("Circular dependency detected in view definitions.")
-            return []
+        view_files = sorted(view_path.glob("*.sql"), key=lambda f: f.stem)
 
         queries = []
-        for view_name in sorted_views:
-            view_file = view_file_map.get(view_name)
-            if view_file:
-                file_queries = self.sp.read_file_queries(view_file)
-                if file_queries:
-                    queries.extend(file_queries)
-                else:
-                    logging.debug(f"No queries found in file for view '{view_name}'. Skipping.")
-
+        for view_file in view_files:
+            file_queries = self.sp.read_file_queries(view_file)
+            if file_queries:
+                queries.extend(file_queries)
+            else:
+                logging.debug(f"No queries found in file for view '{view_file.stem}'. Skipping.")
+        
         return queries
     
     def get_schema_init(self) -> list[str]:

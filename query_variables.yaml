@@ -1,7 +1,0 @@
-mydev:
-  '!!!storage_url!!!': https://svamint.visualstudio.com/SVAM_Internal_Bobsled/_git/SVAM_Internal_Bobsled
-  '!!!ENABLED!!!': 'TRUE'
-
-prdbranch:
-  '!!!storage_url!!!': https://svamint.visualstudio.com/SVAM_Internal_Bobsled/_git/SVAM_Internal_Bobsled
-  '!!!ENABLED!!!': 'TRUE'

@@ -1,4 +1,4 @@
-# Snowflow
+# SnowFlow
 
 ## Overview
 
@@ -12,7 +12,19 @@ To install Snowflow, use the following command:
 pip install snowflow
 ```
 
-Ensure that you have configured your `connections.toml` and `query_variables.yaml` properly before running the app.
+### Usage
+
+For general help:
+```bash
+snowflow -h
+```
+
+For command-specific help:
+```bash
+snowflow <command> -h
+```
+
+Ensure that you have configured your `connections.toml` properly before running the app.
 
 ## Features
 
@@ -20,14 +32,13 @@ Snowflow supports a variety of commands to make Snowflake object management and 
 
 ### 1. `init`
 
-The `init` command is responsible for initializing the Snowflake environment, databases, or schemas. It sets up folder structures and prepares the account for deployment.
+The `init` command is responsible for initializing the Snowflake environment, databases, or schemas. It sets up folder structures and prepares the account for deployment. The environment flag `-e` is not required for `init`.
 
 - **Usage**: 
 ```bash
-snowflow init -e <environment> -d <database> -s <schema>
+snowflow init -d <database> -s <schema>
 ```
 - **Options**:
-  - `-e`: Environment 
   - `-d`: Database name
   - `-s`: Schema name
 
@@ -88,6 +99,27 @@ snowflow test_dag -e <environment> -d <database> -s <schema> -f <dag_file>
 
 Each function has error handling for scenarios such as invalid environments or database errors to ensure smooth execution.
 
+## Environment Management
+
+Snowflow supports managing environments in two ways: separate accounts or separate databases. This flexibility allows organizations to align Snowflow's configuration with their Snowflake architecture, depending on their deployment needs and security considerations.
+
+1. **Separate Accounts**
+In this setup, each environment (such as dev, test, or prd) corresponds to a distinct Snowflake account. Each account has its own isolated set of credentials, data, and configurations.
+
+* **Use Case**: Recommended for organizations with strong environment isolation requirements.
+* **Environment Parameter**: The -e parameter specifies the account-specific environment (e.g., -e dev or -e prd), which maps to configurations in connections.toml for each account.
+* **query_variables.yaml**: Can define account-specific variables, such as account URLs and specific resource configurations.
+
+2. **Separate Databases within a Single Account**
+
+In this approach, all environments exist within a single Snowflake account but are isolated by database names (example: dev_db, test_db, and prd_db).
+
+* **Use Case**: Suitable for teams that want environment separation within a single account for ease of access and reduced account management overhead.
+* **Environment Parameter**: The -e parameter specifies the target database environment (e.g., -e dev or -e prd), allowing Snowflow to point to the correct resources for each database within the account.
+* **query_variables.yaml**: This file can specify different database configurations and variables for each environment.
+
+Both methods require that the specified environment in connections.toml matches the intended account or database setup. This mapping, along with the `-e` parameter, ensures Snowflow performs operations in the correct environment.
+
 ## Authentication Methods
 
 Snowflow supports two authentication methods for connecting to Snowflake:
@@ -142,11 +174,12 @@ This method uses a given Single Sign-On provider of your choice and securely cac
 
 ## Configuration Files
 
-Snowflow requires a few configuration files to define how it interacts with Snowflake, including environments and variable settings.
+Snowflow requires `connections.toml` to define how it interacts with Snowflake. `query_variables.yaml` is optional. Below are setup instructions and explanations for both.
 
 ### 1. `connections.toml`
 
 The `connections.toml` file defines the connection settings for each environment, including Snowflake credentials and environment-specific details. The example configuration below shows the configuration setup for user/password, RSA key-pair and SSO - in that order.
+
 #### Example Configuration:
 ```toml
 [environment_name]
@@ -181,9 +214,28 @@ role = "your_role"
 
 ### 2. `query_variables.yaml`
 
-This file contains environment-specific configuration variables that Snowflow uses during deployments and to validate environment names during command execution. Snowflow requires a `query_variables.yaml` file to be present in the directory where you are running the app.
+The `query_variables.yaml` file allows users to define environment-specific variables that Snowflow can substitute into SQL queries or YAML files at runtime. This approach enables flexible, environment-dependent configurations without hardcoding values directly into code or query files.
 
-#### Example:
+#### Use Cases
+
+1. **Environment-Specific Configuration:**
+
+  * Define environment-dependent values such as URLs, enabled states, and file paths.
+  * Facilitate deployments across multiple environments (example: dev, prd) with different configurations.
+
+2. **Query Substitutions:**
+
+  * Insert specific values (e.g., storage_url or ENABLED flags) into SQL queries dynamically, improving adaptability and avoiding repetitive updates across environments.
+
+3. **Flexible Settings Management:**
+
+  * Easily manage and update configurations for each environment from a single file, enabling smooth deployment and testing transitions.
+
+#### Preferred Naming Style
+
+Variable names within query_variables.yaml can be in any format, but the !!!variable_name!!! style is preferred as it stands out within SQL code. However, this naming style is optional.
+
+#### Example Content for `query_variables.yaml`:
 ```yaml
 branch_name (eg: dev):
   '!!!storage_url!!!': YOUR_STORAGE_URL
@@ -193,6 +245,39 @@ branch_name (eg: prd):
   '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
 ```
+In this example:
+
+* dev and prd are environment keys, each containing variables specific to that environment.
+* The !!!storage_url!!! and !!!ENABLED!!! variables are assigned values specific to each environment.
+
+#### Usage Examples
+
+1. **SQL Example**
+
+In a SQL file, you might use `query_variables.yaml` values as placeholders to be substituted:
+
+```sql
+CREATE OR REPLACE STAGE my_stage
+  URL = '!!!storage_url!!!'
+  ENABLED = '!!!ENABLED!!!';
+```
+In this case:
+
+* !!!storage_url!!! will be replaced with the value in query_variables.yaml for the current environment.
+* !!!ENABLED!!! will also be replaced with the corresponding environment-specific value.
+
+2. **YAML Example**
+
+You can set up a YAML file like below:
+
+```yaml
+stage_config:
+  url: '!!!storage_url!!!'
+  enabled: '!!!ENABLED!!!'
+```
+In this case:
+
+* The values for url and enabled would be replaced dynamically based on the environment, pulling from `query_variables.yaml`.
 
 ## Requirements
 
