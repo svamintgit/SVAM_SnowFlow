@@ -210,6 +210,7 @@ class Environment:
         self.sp.substitutions = self.query_variables or {}
 
     def get_query_variables(self, env):
+        logging.info(f"In get_query_variables with env: {env}")
         try:
             local_path = os.path.join(os.getcwd(), 'query_variables.yaml')
             logging.debug(f"Looking for query variables in: {local_path}")
