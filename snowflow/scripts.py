@@ -133,7 +133,7 @@ class ScriptParser:
     def get_path_queries(self, path: Path, single_transaction: bool = False) -> list[str]:
         """
         Loop over path, return contents of files in a list of queries.
-        Looks in the current working directory.
+        Looks in the current working directory
         """
         user_path = os.path.join(os.getcwd(), path)
     
