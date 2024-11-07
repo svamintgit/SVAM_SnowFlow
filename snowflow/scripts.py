@@ -225,6 +225,8 @@ class Environment:
             logging.error(f"Unexpected error in get_query_variables: {e}")
             raise
 
+        return {}
+
     def initialize(self):
         '''
         Make the local connection and query variables file
