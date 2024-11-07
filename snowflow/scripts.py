@@ -17,15 +17,10 @@ class ScriptParser:
         try:
             with open(file_path, 'r') as raw_yaml:
                 string_file = raw_yaml.read()
-                string_file.replace('\t','  ')
+                string_file = string_file.replace('\t','  ')
                 string_file = self.substitute_vars(string_file)
                 dict = yaml.safe_load(string_file)
-            
-            if dict is None:
-                logging.debug(f"YAML file at {file_path} is empty")
-                return {}
-            
-            return dict
+                return dict if dict is not None else {}
         except FileNotFoundError as e:
             logging.error(f"YAML file not found at path: {file_path}. Error: {e}")
             return {}
