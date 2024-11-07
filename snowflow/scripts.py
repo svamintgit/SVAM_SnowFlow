@@ -224,10 +224,6 @@ class Environment:
         
             if raw_vars is None:
                 logging.info("query_variables.yaml is empty.")
-                raw_vars = {}
-
-            if not raw_vars:
-                logging.info("query_variables.yaml is empty.")
                 return {}
 
             if env not in raw_vars:

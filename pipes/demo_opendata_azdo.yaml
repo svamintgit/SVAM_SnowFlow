@@ -36,11 +36,10 @@ steps:
     sed -i 's|C:/Users/AryanSingh/rsa_key.der|/home/vsts/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
-# Install dependencies and SnowFlow
+# Install dependencies and Bobsled
 - script: |
     echo 'Installing dependencies'
     pip install -r requirements.txt
-    pip install snowflow
   displayName: 'Install Python dependencies and SnowFlow'
 
 # Deploy to mydev
