@@ -223,6 +223,7 @@ class Environment:
             return raw_vars[env]
         except FileNotFoundError as e:
             logging.info(f"Query variables file not found: {e}. Proceeding without substitutions.")
+            return {}
         except yaml.YAMLError as e:
             logging.error(f"Error in parsing YAML for query variables: {e}")
             raise
