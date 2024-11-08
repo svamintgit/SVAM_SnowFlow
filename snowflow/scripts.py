@@ -15,23 +15,14 @@ class ScriptParser:
         Load a yaml file as a python dictionary
         '''
         try:
-            logging.info(f"Opening YAML file at: {file_path}")
             with open(file_path, 'r') as raw_yaml:
                 string_file = raw_yaml.read()
-                logging.info(f"Raw content read from {file_path}: {string_file}")
                 string_file = string_file.replace('\t','  ')
-                logging.info(f"File content before substitution: {string_file}")
                 string_file = self.substitute_vars(string_file)
-                logging.info(f"Content after substitution: {string_file}")
                 data = yaml.safe_load(string_file)
                 if data is None:
-                    logging.warning("Parsed YAML data is None.")
                     return {}
-                logging.info(f"Parsed YAML data: {data}")
                 return data
-        except FileNotFoundError as e:
-            logging.error(f"YAML file not found at path: {file_path}. Error: {e}")
-            return {}
         except yaml.YAMLError as e:
             logging.error(f"YAML parsing error in {file_path}. Error: {e}")
             return {}
@@ -209,25 +200,22 @@ class Environment:
         self.sp.substitutions = self.query_variables or {}
 
     def get_query_variables(self, env):
-        logging.info(f"In get_query_variables with env: {env}")
         try:
             local_path = os.path.join(os.getcwd(), 'query_variables.yaml')
             logging.debug(f"Looking for query variables in: {local_path}")
 
             if not os.path.exists(local_path):
-                logging.info("query_variables.yaml not found.")
+                logging.debug("query_variables.yaml not found.")
                 return {}
 
             raw_vars = self.sp.parse_yaml_file(local_path)
 
-            logging.info(f"Contents of raw_vars after parsing: {raw_vars}")
-        
             if raw_vars is None:
-                logging.info("query_variables.yaml is empty.")
+                logging.debug("query_variables.yaml is empty.")
                 return {}
 
             if env not in raw_vars:
-                logging.info(f"No variables found for environment '{env}' in query_variables.yaml.")
+                logging.debug(f"No variables found for environment '{env}' in query_variables.yaml.")
                 return {}
 
             logging.info(f"Query variables found for environment '{env}': {raw_vars[env]}")
