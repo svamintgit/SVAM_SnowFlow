@@ -104,6 +104,7 @@ Each function has error handling for scenarios such as invalid environments or d
 Snowflow supports managing environments in two ways: separate accounts or separate databases. This flexibility allows organizations to align Snowflow's configuration with their Snowflake architecture, depending on their deployment needs and security considerations.
 
 1. **Separate Accounts**
+
 In this setup, each environment (such as dev, test, or prd) corresponds to a distinct Snowflake account. Each account has its own isolated set of credentials, data, and configurations.
 
 * **Use Case**: Recommended for organizations with strong environment isolation requirements.
