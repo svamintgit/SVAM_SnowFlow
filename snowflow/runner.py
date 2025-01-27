@@ -135,7 +135,8 @@ class SnowflakeUser:
     def _get_session(self) -> Session:
         try:
             if self.connection_config.get("private_key_path"):
-                return self._connect_with_rsa(self.connection_config)
+                # return self._connect_with_rsa(self.connection_config)
+                return self._connect_with_rsa()
             elif self.connection_config.get("authenticator") == "externalbrowser":
                 return self._connect_with_sso()
             elif self.connection_config.get("user") and self.connection_config.get("password"):
