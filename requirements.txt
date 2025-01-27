@@ -3,3 +3,4 @@ snowflake-snowpark-python
 pyyaml
 networkx
 toml
+snowflake-connector-python[secure-local-storage]
