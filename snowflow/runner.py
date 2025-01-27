@@ -1,71 +1,90 @@
 from snowflake.snowpark import Session, Row
 from snowflake.connector.errors import ProgrammingError, DatabaseError
 import logging
-from . import scripts
+import platform
 import os
 import toml
-import time
-import json
+import sys
+
+class ConnectionFile:
+    def __init__(self, environment: str):
+        self.environment=environment
+        self.config_path = self.get_config_path()
+        logging.info(f'opening {self.config_path}')
+        self.config: dict = self.get_config_dict(self.config_path)
+        self.required_fields = ["account", "role", "warehouse"]
+        self.validate_config_keys()
+
+    def get_config_path(self) -> str:
+        system = platform.system() 
+        user_root = os.path.expanduser('~')
+        default_path = os.path.join(user_root, '.snowflake', 'connections.toml')
+
+        if os.path.exists(default_path):
+            return default_path
+        elif system == "Windows":
+            return self.get_windows_config_path()
+        elif system == "Linux":
+            return self.get_linux_config_path()
+        elif system == "Darwin":
+            return self.get_mac_config_path()
+        else:
+            logging.error(f"Operating system value not found. Expected values of Windows,Linux, or Darwin for platform.system() Found:"+system)
+            raise
+        
+    def get_windows_config_path(self) -> str:
+        try:
+            base = os.path.expandvars('%USERPROFILE%')
+            return os.path.join(base,'AppData','Local','snowflake', 'connections.toml')
+        except Exception as e:
+            logging.error(f"Unexpected error when reading Snowflake config file on Windows OS: {e}")
+            raise
+    
+    def get_linux_config_path(self) -> str:
+        try:
+            base_path= os.path.expanduser('~')
+            return os.path.join(base_path,'.config','snowflake','connections.toml')
+        except Exception as e:
+            logging.error(f"Unexpected error when reading Snowflake config file on Linux OS: {e}")
+            raise
+
+    def get_mac_config_path(self) -> str:
+        try:
+            base_path= os.path.expanduser('~')
+            return os.path.join(base_path,'Library','Application Support','snowflake','connections.toml')
+        except Exception as e:
+            logging.error(f"Unexpected error when reading Snowflake config file on Linux OS: {e}")
+            raise
+
+    def get_config_dict(self, toml_path) -> dict:
+        try:
+            with open(toml_path, "r") as toml_file:
+                config = toml.load(toml_file)
+                return config[self.environment]
+        except KeyError:
+            raise KeyError(f"Could not find environment key {self.environment} in connections.toml file")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Could not find connections.toml file at {toml_path}.")
+        except Exception as e:
+            raise Exception(f"An error occurred while reading the TOML file: {e}")
+
+    def validate_config_keys(self) -> bool:
+        if not set(self.required_fields) <= set(self.config.keys()):
+            logging.error(f'Could not find all required connection parameters in environment {self.environment} in connection file {self.config_path}')
+            raise
 
 class SnowflakeUser:
     def __init__(self, environment: str):
         if not environment:
             raise ValueError("Environment not specified. Please provide a valid environment.")
         self.environment = environment
-        self.environment_obj = scripts.Environment(environment) 
-        self.query_variables = self.environment_obj.query_variables or {}
-        self.config = self._load_toml_config()
-        self._validate_connection_parameters()
+        self.connection_file = ConnectionFile(self.environment)
+        self.connection_config = self.connection_file.config
         self.session = self._get_session()
-        self.token_cache_file = os.path.join(os.path.expanduser("~"), ".snowflake", "token_cache.json")
-
-    def _validate_connection_parameters(self):
-        """
-        Check for listed connection parameters and warn if database is missing
-        """
-
-        environment_config = self.config.get(self.environment, {})
-
-        required_fields = ["account", "role", "warehouse"]
-        missing_fields = [field for field in required_fields if not environment_config.get(field)]
         
-        if not environment_config.get("database"):
-            logging.warning("No 'database' specified in the connection.")
-        else:
-            required_fields.append("database")
-
-        if missing_fields:
-            missing_str = ", ".join(missing_fields)
-            raise ValueError(f"Missing required connection parameters: {missing_str}")
-    
-    def _get_connection_parameters(self, input_dict: dict) -> dict:
-        connection_parameters =dict()
-        logging.info(set(input_dict.keys()))
-        logging.info(set(self.connection_keys.values()))
-        if set(self.connection_keys.values()).issubset(set(input_dict.keys())):
-            for input_key, lookup_key in self.connection_keys.items():
-                connection_parameters[input_key]= input_dict[lookup_key]
-            return connection_parameters
-        else:
-            logging.error('Could not find all required connection parameters')
-            return {}
-        
-    def _load_toml_config(self) -> dict:
-        home_dir = os.path.expanduser("~") 
-        toml_file_path = os.path.join(home_dir, ".snowflake", "connections.toml")
-
+    def _connect_with_rsa(self):
         try:
-            with open(toml_file_path, "r") as toml_file:
-                config = toml.load(toml_file)
-                return config
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Could not find connections.toml file at {toml_file_path}.")
-        except Exception as e:
-            raise Exception(f"An error occurred while reading the TOML file: {e}")
-        
-    def _connect_with_rsa(self, environment_config):
-        try:
-            private_key_path = environment_config.get("private_key_path")
+            private_key_path = self.connection_config.get("private_key_path")
 
             if not os.path.isabs(private_key_path):
                 private_key_path = os.path.join(os.getcwd(), private_key_path)
@@ -73,25 +92,12 @@ class SnowflakeUser:
             if private_key_path:
                 with open(private_key_path, "rb") as key_file:
                     private_key = key_file.read()
-
-                passphrase = environment_config.get("private_key_passphrase")
-
-                session_builder = Session.builder.configs({
-                    "account": environment_config["account"],
-                    "user": environment_config["user"],
-                    "authenticator": "snowflake_jwt",  
-                    "private_key": private_key,
-                    "role": environment_config["role"],
-                    "database": environment_config["database"],
-                    "warehouse": environment_config["warehouse"],
-                })
-
-                if passphrase:
-                    session_builder = session_builder.config("private_key_passphrase", passphrase)
-
+                self.connection_config['private_key']= private_key
+                self.connection_config['authenticator']= "snowflake_jwt"
+                session_builder = Session.builder.configs(self.connection_config)
                 return session_builder.create()
             else:
-                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file.")
+                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file. Looked in path {private_key_path}")
         except FileNotFoundError as e:
             logging.error(f"Private key file not found at path: {private_key_path}. Error: {e}")
             raise
@@ -113,36 +119,9 @@ class SnowflakeUser:
             logging.error(f"Unexpected error occured during connection: {e}")
             raise
 
-    def _connect_with_sso(self, environment_config):
+    def _connect_with_sso(self):
         try:
-            if os.path.exists(self.token_cache_file):
-                with open(self.token_cache_file, "r") as cache_file:
-                    token_data = json.load(cache_file)
-                    if time.time() < token_data.get("expiry", 0):
-                        logging.debug("Using cached SSO token.")
-                        session_params = token_data["session_params"]
-                        return Session.builder.configs(session_params).create()
-
-            session_params = {
-                "account": environment_config["account"],
-                "user": environment_config["user"],
-                "authenticator": "externalbrowser",
-                "database": environment_config.get("database"),
-                "schema": environment_config.get("schema"),
-                "warehouse": environment_config.get("warehouse"),  
-                "role": environment_config.get("role"),
-            }
-        
-            session = Session.builder.configs(session_params).create()
-
-            token_data = {
-                "session_params": session_params,
-                "expiry": time.time() + 3600  
-            }
-
-            os.makedirs(os.path.dirname(self.token_cache_file), exist_ok=True)
-            with open(self.token_cache_file, "w") as cache_file:
-                json.dump(token_data, cache_file)
+            session = Session.builder.config("connection_name", self.environment).create()
 
             return session
 
@@ -155,23 +134,14 @@ class SnowflakeUser:
 
     def _get_session(self) -> Session:
         try:
-            environment_config = self.config.get(self.environment)
-            if not environment_config:
-                raise ValueError(f"Environment '{self.environment}' not found in the TOML file.")
-
-            e_config = self.config.get(self.environment, {})
-            log_config = {key: e_config.get(key) for key in ['user', 'database', 'warehouse', 'role']}
-            logging.info(f"Loaded configuration for {self.environment}: {log_config}")
-
-            if "private_key_path" in environment_config:
-                return self._connect_with_rsa(environment_config)
-            elif "authenticator" in environment_config and environment_config["authenticator"] == "externalbrowser":
-                return self._connect_with_sso(environment_config)
-            elif "user" in environment_config and "password" in environment_config:
+            if self.connection_config.get("private_key_path"):
+                return self._connect_with_rsa(self.connection_config)
+            elif self.connection_config.get("authenticator") == "externalbrowser":
+                return self._connect_with_sso()
+            elif self.connection_config.get("user") and self.connection_config.get("password"):
                 return self._connect_with_password()
             else:
-                raise ValueError(f"Missing login credentials. Please add either 'private_key_path' for RSA key-pair authentication or 'user' and 'password' for username-password authentication to the TOML file.")
-
+                raise ValueError(f"Missing login credentials. Please add either 'private_key_path' for RSA key-pair authentication or 'user' and 'password' for username-password authentication, or authenticator: externalbrowser for SSO authentication")
         except ValueError as ve:
             logging.error(f"ValueError: {ve}")
             raise
@@ -227,3 +197,10 @@ class SnowflakeUser:
         for file_config in file_configs:
             outp.append(self.session.file.put(file_config['local_path'], file_config['stage_path'], auto_compress=False, overwrite=True))
         return outp
+    
+if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
+
+    sf_user = SnowflakeUser('DEV_DB_SSO')
+    print(sf_user.run_query('select * from MOCJ_DB.INFORMATION_SCHEMA.DATABASES limit 10'))
