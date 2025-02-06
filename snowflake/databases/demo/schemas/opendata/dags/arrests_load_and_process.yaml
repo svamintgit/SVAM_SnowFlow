@@ -1,5 +1,5 @@
 DAG_NAME: arrests_load_and_process
-SCHEDULE: 'USING CRON * * * * * UTC'
+SCHEDULE: 'USING CRON 0 0 1 * * UTC'
 WAREHOUSE: 'load'
 ROOT_TASK: root
 INITIAL_WAREHOUSE_SIZE: 'XSMALL'

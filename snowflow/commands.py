@@ -1,8 +1,8 @@
 import logging
 from . import runner
 from . import scripts
-from pathlib import Path
 from snowflake.connector.errors import ProgrammingError, DatabaseError
+import sys
 
 class Argument:
     def __init__(self, option, required, help):
@@ -43,7 +43,6 @@ class Deploy:
             raise ValueError("The '-e' argument is required for 'deploy' command.")
         try:
             user = runner.SnowflakeUser(self.environment)
-            self.run_global_init(user)
             if args.get('d')==None:
                 logging.info('Snowflow deploy account')
                 self.account(user)
@@ -66,15 +65,17 @@ class Deploy:
     def account(self, user: runner.SnowflakeUser) -> None:
         user.session.query_tag= 'Snowflow deploy account'
         acct = scripts.SnowflakeAcct(self.environment)
-        user.run_queries(acct.get_roles())
-        user.run_queries(acct.get_warehouses())
-        user.run_queries(acct.get_integrations())
-        user.run_queries(acct.get_network_rules())
-        user.run_queries(acct.get_network_policies())
+        user.run_queries(acct.get_init(), object_type = "init")
+
+        user.run_queries(acct.get_path_objects('roles'), object_type = "roles")
+        user.run_queries(acct.get_path_objects('warehouses'), object_type = "warehouses")
+        user.run_queries(acct.get_path_objects('integrations'), object_type = "integrations")
+        user.run_queries(acct.get_path_objects('network_rules'), object_type = "network_rules")
+        user.run_queries(acct.get_path_objects('network_policies'), object_type = "network_policies")
+        user.run_queries(acct.get_grants(), object_type = "grants")
         logging.info('Account deployed')
 
     def database(self, user: runner.SnowflakeUser, db_name:str) -> None:
-        logging.info('Snowflow Deploy Database')
         user.session.query_tag= 'Snowflow Deploy Database: '+db_name
         acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
@@ -82,43 +83,27 @@ class Deploy:
         logging.info('Database Deployed')
 
     def schema(self, user: runner.SnowflakeUser, db_name:str, schema_name: str) -> None:
-        logging.info('Snowflow Deploy Schema')
         user.session.query_tag= 'Snowflow Deploy Schema: '+db_name+'.'+schema_name
         acct = scripts.SnowflakeAcct(self.environment)
         db = scripts.SnowflakeDB(db_name,acct)
         schema = scripts.SnowflakeSchema(schema_name, db)
 
-        schema_queries = schema.get_schema_init() 
-        user.run_queries(schema_queries)
+        user.run_queries(schema.get_schema_init(),  object_type = "init")
         user.session.use_schema(schema_name)
 
-        user.run_queries(schema.get_file_formats(), object_type = "file_formats")
-        user.run_queries(schema.get_stages(), object_type = "stages")
+        user.run_queries(schema.get_path_objects('file_formats'), object_type = "file_formats")
+        user.run_queries(schema.get_path_objects('stages'), object_type = "stages")
         user.post_files(schema.get_staged_files())
-        user.run_queries(schema.get_udfs(), object_type = "udfs")
-        user.run_queries(schema.get_tables(), object_type = "tables")
-        user.run_queries(schema.get_streams(), object_type = "streams")
-        user.run_queries(schema.get_views(), object_type = "views")
-        user.run_queries(schema.get_stored_procs(), object_type = "stored_procs")
-        user.run_queries(schema.get_tasks(), object_type = "tasks")
+        user.run_queries(schema.get_path_objects('udfs'), object_type = "udfs")
+        user.run_queries(schema.get_path_objects('tables'), object_type = "tables")
+        user.run_queries(schema.get_path_objects('views'), object_type = "views")
+        user.run_queries(schema.get_path_objects('streams'), object_type = "streams")
+        user.run_queries(schema.get_path_objects('stored_procs', single_transaction=True), object_type = "stored_procs")
+        user.run_queries(schema.get_path_objects('tasks'), object_type = "tasks")
         user.run_queries(schema.get_dags(), object_type = "dags")
-        user.run_queries(schema.get_post_deploy(), object_type = "post_deploy")
+        user.run_queries(schema.get_path_objects('post_deploy'), object_type = "post_deploy")
         user.run_queries(schema.get_grants(), object_type = "grants")
         logging.info('Schema Deployed')
-
-    def run_global_init(self, user: runner.SnowflakeUser) -> None:
-        try:
-            logging.info('Running global init')
-            acct = scripts.SnowflakeAcct(self.environment)
-            global_init_queries = acct.run_global_init()
-            user.run_queries(global_init_queries)
-            logging.info('Global init completed')
-        except (ProgrammingError, DatabaseError) as db_error:
-            logging.error(f"Database or programming error during global init: {db_error}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error occured")
-            raise
 
 class Init:
     help = 'Initialize folder structure for account, database, or schema. Does not require -e.'
@@ -300,3 +285,7 @@ class TestDAG:
         except Exception as e:
             logging.error(f"Unexpected error during DAG test: {e}")
             raise
+
+if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')

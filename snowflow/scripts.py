@@ -4,7 +4,6 @@ import logging
 import networkx as nx
 import sys
 import os
-import re
 
 class ScriptParser:
     def __init__(self, substitutions=dict()):
@@ -112,11 +111,13 @@ class ScriptParser:
         Read a sql file that can contain multiple queries
         '''
         try:
-            if single_transaction:
-                clean = [self.read_clean_file(path)]
-            else:
-                clean = self.read_clean_file(path).strip(';').split(';')
-            return clean
+            queries= []
+            if os.path.exists(path):
+                if single_transaction:
+                    queries = [self.read_clean_file(path)]
+                else:
+                    queries = self.read_clean_file(path).strip(';').split(';')
+            return queries
         except Exception as e:
             logging.error(e)
             return []
@@ -127,13 +128,8 @@ class ScriptParser:
         Looks in the current working directory
         """
         user_path = os.path.join(os.getcwd(), path)
-    
-        if not os.path.exists(user_path):
-            logging.error(f"Directory not found: {user_path}")
-            return []
-
         queries = []
-        for f in Path(user_path).glob("*.sql"):
+        for f in sorted(Path(user_path).glob("*.sql")):
             if single_transaction:
                 queries.append(self.read_clean_file(f))
             else:
@@ -142,11 +138,25 @@ class ScriptParser:
         logging.debug(queries)
         return queries
 
-        
+class SQLTemplates:
+    def __init__(self):
+        self.sf_task_template = self.get_template('sf_task_template.sql')
+        self.sql_procedure_template = self.get_template('sql_procedure_template.sql')
+        self.user_task_template = self.get_template('user_task_template.sql')
+
+    def get_template(self, name):
+        p = Path(__file__).with_name(name)
+        try:
+            with p.open('r') as f:
+                return f.read()
+        except FileNotFoundError as e:
+            logging.error(e)
+            logging.error('Could not find sql template')
+            sys.exit(1)
+
 class DirectoryHandler:
     def __init__(self):
         self.root_dir = os.getcwd()
-        self.sql_templates_path = Path(self.root_dir, 'snowflow','sql_templates')
 
     def mkdir(self, path: Path) -> Path:
         try:
@@ -225,11 +235,6 @@ class Environment:
             logging.error(f"Unexpected error in get_query_variables: {e}")
             return {}
 
-    def initialize(self):
-        '''
-        Make the local connection and query variables file
-        '''
-        pass
 
 class SnowflakeAcct:
     '''
@@ -252,28 +257,19 @@ class SnowflakeAcct:
     def initialize(self) -> None:
         Path(self.env_dir, 'init.sql').touch()
         Path(self.env_dir, 'grants.sql').touch()
-    
-    def get_roles(self) -> list[str]:
-        return self.sp.get_path_queries(self.child_lookup['roles'])
-    
-    def get_warehouses(self) -> list[str]:
-        return self.sp.get_path_queries(self.child_lookup['warehouses'])
-    
-    def get_integrations(self) -> list[str]:
-        return self.sp.get_path_queries(self.child_lookup['integrations'])
-    
-    def get_network_rules(self) -> list[str]:
-        return self.sp.get_path_queries(self.child_lookup['network_rules'])
-    
-    def get_network_policies(self) -> list[str]:
-        return self.sp.get_path_queries(self.child_lookup['network_policies'])
+
+    def get_path_objects(self, obj_type:str, single_transaction: bool=False) -> list[str]:
+        '''
+        Look up scripts based on string type (roles, tables, views, etc)
+        Use single transaction is a file shouldn't be split into multiple transactions by semicolons
+        '''
+        return self.sp.get_path_queries(self.child_lookup[obj_type],single_transaction)
 
     def get_grants(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.env_dir, 'grants.sql'))
     
-    def run_global_init(self) -> list[str]:
-        global_init_path = Path(self.env_dir, 'init.sql')
-        return self.sp.read_file_queries(global_init_path)
+    def get_init(self) -> list[str]:
+        return self.sp.read_file_queries(Path(self.env_dir, 'init.sql'))
     
     def get_databases(self) -> list:
         #return all the database objects
@@ -307,12 +303,6 @@ class SnowflakeDB:
     
     def get_schemas(self):
         return [SnowflakeSchema(s.stem,self) for s in self.path_lookup['schemas'].iterdir() if s.is_dir()]
-    
-    def get_file_queries(self, file_path):
-        '''
-        For testing purposes. Given a file, extract the query
-        '''
-        return self.sp.read_file_queries(Path(self.path,file_path))
 
     def initialize(self):
         self.account.initialize()
@@ -325,15 +315,9 @@ class SnowflakeSchema:
         self.database = database
         self.account= self.database.account
         self.environment = self.account.environment
-
-        if self.environment:
-            self.query_variables = self.environment.query_variables
-            self.sp = database.sp
-            self.sp.substitutions = self.sp.substitutions | self.query_variables
-        else:
-            self.query_variables = {}
-            self.sp = ScriptParser()
-        
+        self.query_variables = self.environment.query_variables
+        self.sp = database.sp
+        self.sp.substitutions = self.sp.substitutions | self.query_variables
         self.dh = database.dh
         self.schema_path = Path(os.getcwd(), 'snowflake', 'databases', self.database.name, 'schemas', self.name)
         self.child_objects= ['file_formats', 'tables','streams','stages','views','tasks','dags','udfs', 'stored_procs', 'staged_files', 'post_deploy']
@@ -345,50 +329,11 @@ class SnowflakeSchema:
     def __repr__(self):
         return self.database.name+'.'+self.name
     
-    def _get_queries_or_empty(self, object_type: str) -> list[str]:
-        """
-        Method to get queries for object type
-        If the folder does not exist, returns an empty list
-        """
-        object_path = self.path_lookup.get(object_type)
-        if object_path and object_path.exists():
-            logging.debug(f"Fetching queries for {object_type}")
-            queries = self.sp.get_path_queries(object_path)
-            if queries:
-                return queries
-            else:
-                return []
-        else:
-            logging.debug(f"Skipping {object_type}, folder does not exist.")
-            return []
-        
-    
-    def get_ordered_views(self) -> list[str]:
-        """
-        Returns a list of view queries in order, based on file name.
-        """
-        view_path = self.path_lookup.get('views')
-        if not view_path or not view_path.exists():
-            logging.debug("Skipping views, folder does not exist.")
-            return []
-
-        view_files = sorted(view_path.glob("*.sql"), key=lambda f: f.stem)
-
-        queries = []
-        for view_file in view_files:
-            file_queries = self.sp.read_file_queries(view_file)
-            if file_queries:
-                queries.extend(file_queries)
-            else:
-                logging.debug(f"No queries found in file for view '{view_file.stem}'. Skipping.")
-        
-        return queries
-    
     def get_schema_init(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.schema_path,'init.sql'))
 
     def get_schema_grants(self) -> list[str]:
-        return self._get_queries_or_empty('grants')
+        return self.sp.read_file_queries(Path(self.schema_path,'grants.sql'))
 
     def initialize(self):
         self.account.initialize()
@@ -396,36 +341,21 @@ class SnowflakeSchema:
         self.dh.initialize_directory(self.schema_path, self.path_lookup)
         return True
     
-    def get_file_formats(self) -> list[str]:
-        return self._get_queries_or_empty('file_formats')
-    
-    def get_tables(self) -> list[str]:
-        return self._get_queries_or_empty('tables')
+    def get_path_objects(self, obj_type:str, single_transaction: bool=False) -> list[str]:
+        '''
+        Look up scripts based on string type (roles, tables, views, etc)
+        Use single transaction is a file shouldn't be split into multiple transactions by semicolons
+        '''
+        return self.sp.get_path_queries(self.path_lookup[obj_type],single_transaction)
 
-    def get_streams(self) -> list[str]:
-        return self._get_queries_or_empty('streams')
-    
-    def get_stages(self) -> list[str]:
-        return self._get_queries_or_empty('stages')
-    
-    def get_views(self) -> list[str]:
-        return self.get_ordered_views()
-    
-    def get_tasks(self) -> list[str]:
-        return self._get_queries_or_empty('tasks')
-    
-    def get_udfs(self) -> list[str]:
-        return self._get_queries_or_empty('udfs')
+    def get_tables(self) -> list[str]:
+        return self.sp.get_path_queries(self.path_lookup.get('tables'))
     
     def get_stored_procs(self) -> list[str]:
         return self.sp.get_path_queries(self.path_lookup.get('stored_procs'), single_transaction=True) if self.path_lookup.get('stored_procs') else []
     
-    def get_post_deploy(self) -> list[str]:
-        return self._get_queries_or_empty('post_deploy')
-
     def get_grants(self) -> list[str]:
         return self.sp.read_file_queries(Path(self.schema_path,'grants.sql')) 
-    
     
     def get_dags(self) -> list[str]:
         queries = []
@@ -473,15 +403,17 @@ class TaskDAG:
     def __init__(self, config_dict: dict, schema: SnowflakeSchema):
         self.config_dict=config_dict
         logging.info(self.config_dict)
+        self.sql_templates  = SQLTemplates()
         self.schema= schema
         self.name = self.config_dict.get('DAG_NAME')
         self.root= self.config_dict.get('ROOT_TASK')
         self.sp = schema.sp
         self.dh = schema.dh
         self.query_variables = self.get_query_variables()
-        self.task_template = self._get_task_template()
+        self.task_template: str = self._get_task_template()
         self.sp.substitutions = self.query_variables
         self.task_dict, self.digraph = self._get_structs()
+         
         
     
     def _get_task_dict(self) -> dict:
@@ -536,11 +468,11 @@ class TaskDAG:
         '''
         Returns the file name of the template to use
         '''
-        template = 'NO_TEMPLATE_FOUND.sql'
+        template = 'NO_TEMPLATE_FOUND'
         if 'INITIAL_WAREHOUSE_SIZE' in self.config_dict.keys():
-            template = 'sf_task_template.sql'
+            template = self.sql_templates.sf_task_template 
         elif 'WAREHOUSE' in self.config_dict.keys():
-            template = 'user_task_template.sql'
+            template = self.sql_templates.user_task_template
         elif 'INITIAL_WAREHOUSE_SIZE' in self.config_dict.keys() and 'WAREHOUSE' in self.config_dict.keys():
             logging.error('Could not determine template to use. Please specify a variable of either INITIAL_WAREHOUSE_SIZE or WAREHOUSE')
         else:
@@ -560,7 +492,6 @@ class Task:
         self.script_path = Path(self.database.dml_path, self.config_dict.get('SCRIPT_PATH'))
         self.sp = ScriptParser(self.dag.sp.substitutions.copy())
         self.sp.substitutions.update(self.get_query_variables())
-        self.templates_folder = dag.dh.sql_templates_path
     
     def get_create_queries(self) -> list[str]:
         l = list()
@@ -577,11 +508,13 @@ class Task:
             return False
     
     def get_sql_proc_code(self) -> list[str]: 
-        proc_path = Path(self.templates_folder, 'sql_procedure_template.sql')
-        sql_proc_code = self.sp.read_clean_file(proc_path)
-
-        print(f"Generated SQL Procedure for {self.name}: \n{sql_proc_code}")
-        return sql_proc_code
+        try:
+            sql_proc_code = self.sp.clean_query(self.dag.sql_templates.sql_procedure_template)
+            logging.info(f"Generated SQL Procedure for {self.name}")
+            logging.debug(f"Generated SQL Procedure for {self.name}: \n{sql_proc_code}")
+            return sql_proc_code
+        except Exception as e:
+            logging.error(e)
     
     def get_when_clause(self) -> str:
         value = self.config_dict.get('WHEN', None)
@@ -620,5 +553,17 @@ class Task:
         return schedule
     
     def get_task_code(self) -> str:
-        template_path = Path(self.templates_folder, self.dag.task_template)
-        return self.sp.read_clean_file(template_path)
+        return self.sp.clean_query(self.dag.task_template)
+    
+
+if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
+
+    acct =SnowflakeAcct('DEV_ACCOUNT')
+
+    
+    db = SnowflakeDB('demo',acct)
+    schema = SnowflakeSchema('opendata', db)
+    print(schema.get_path_objects('views'))
+

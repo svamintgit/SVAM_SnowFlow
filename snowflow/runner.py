@@ -61,12 +61,14 @@ class ConnectionFile:
             with open(toml_path, "r") as toml_file:
                 config = toml.load(toml_file)
                 return config[self.environment]
-        except KeyError:
-            raise KeyError(f"Could not find environment key {self.environment} in connections.toml file")
+        except toml.TomlDecodeError as tde:
+            raise  toml.TomlDecodeError(f'Error parsing the connections.toml file: {tde}')
         except FileNotFoundError:
             raise FileNotFoundError(f"Could not find connections.toml file at {toml_path}.")
         except Exception as e:
             raise Exception(f"An error occurred while reading the TOML file: {e}")
+        except KeyError:
+            raise KeyError(f"Could not find environment key {self.environment} in connections.toml file")
 
     def validate_config_keys(self) -> bool:
         if not set(self.required_fields) <= set(self.config.keys()):
@@ -172,12 +174,10 @@ class SnowflakeUser:
         Logs and skips execution if no queries are provided.
         """
         outp = []
-        if not queries:
-            logging.debug(f"Skipping {object_type}, no queries to execute.")
-            return outp
 
         for index, query in enumerate(queries):
             try:
+                logging.info(f"Executing query {index + 1}/{len(queries)} for {object_type}")
                 logging.debug(f"Executing query {index + 1}/{len(queries)} for {object_type}: {query}")
                 result = self.run_query(query)
                 outp.append(result)
@@ -195,12 +195,10 @@ class SnowflakeUser:
     def post_files(self, file_configs: list[dict]) -> list:
         outp = []
         for file_config in file_configs:
+            logging.info(f"Loading local file {file_config['local_path']} to {file_config['stage_path']}")
             outp.append(self.session.file.put(file_config['local_path'], file_config['stage_path'], auto_compress=False, overwrite=True))
         return outp
     
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(filename)s - %(funcName)s - %(message)s')
-
-    sf_user = SnowflakeUser('DEV_DB_SSO')
-    print(sf_user.run_query('select * from MOCJ_DB.INFORMATION_SCHEMA.DATABASES limit 10'))
