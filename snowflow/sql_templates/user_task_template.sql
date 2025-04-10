@@ -1,9 +1,0 @@
-CREATE OR REPLACE TASK !!!TASK_NAME!!!
-COMMENT = 'Programtically generated for !!!DAG_NAME!!!'
-WAREHOUSE = '!!!WAREHOUSE!!!'
-!!!SCHEDULE!!!
-!!!ROOT_VARIABLES!!!
-!!!WHEN_CLAUSE!!!
-AS
-CALL !!!PROC_NAME!!!()
-;

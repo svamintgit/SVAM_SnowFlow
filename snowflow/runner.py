@@ -81,69 +81,14 @@ class SnowflakeUser:
             raise ValueError("Environment not specified. Please provide a valid environment.")
         self.environment = environment
         self.connection_file = ConnectionFile(self.environment)
-        self.connection_config = self.connection_file.config
         self.session = self._get_session()
-        
-    def _connect_with_rsa(self):
-        try:
-            private_key_path = self.connection_config.get("private_key_path")
 
-            if not os.path.isabs(private_key_path):
-                private_key_path = os.path.join(os.getcwd(), private_key_path)
-
-            if private_key_path:
-                with open(private_key_path, "rb") as key_file:
-                    private_key = key_file.read()
-                self.connection_config['private_key']= private_key
-                self.connection_config['authenticator']= "snowflake_jwt"
-                session_builder = Session.builder.configs(self.connection_config)
-                return session_builder.create()
-            else:
-                raise ValueError(f"Private key not found for environment '{self.environment}' in the TOML file. Looked in path {private_key_path}")
-        except FileNotFoundError as e:
-            logging.error(f"Private key file not found at path: {private_key_path}. Error: {e}")
-            raise
-        except (ProgrammingError, DatabaseError) as db_error:
-            logging.error(f"Snowflake connection error: {db_error}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error occured during RSA authentication: {e}")
-            raise
-
-    def _connect_with_password(self):
-        try:
-            session = Session.builder.config("connection_name", self.environment).create()
-            return session
-        except (ProgrammingError, DatabaseError) as db_error:
-            logging.error(f"Snowflake connection error: {db_error}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error occured during connection: {e}")
-            raise
-
-    def _connect_with_sso(self):
-        try:
-            session = Session.builder.config("connection_name", self.environment).create()
-
-            return session
-
-        except (ProgrammingError, DatabaseError) as db_error:
-            logging.error(f"Snowflake connection error: {db_error}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error occurred during SSO authentication: {e}")
-            raise
 
     def _get_session(self) -> Session:
         try:
-            if self.connection_config.get("private_key_path"):
-                return self._connect_with_rsa()
-            elif self.connection_config.get("authenticator") == "externalbrowser":
-                return self._connect_with_sso()
-            elif self.connection_config.get("user") and self.connection_config.get("password"):
-                return self._connect_with_password()
-            else:
-                raise ValueError(f"Missing login credentials. Please add either 'private_key_path' for RSA key-pair authentication or 'user' and 'password' for username-password authentication, or authenticator: externalbrowser for SSO authentication")
+            session = Session.builder.config("connection_name", self.environment).create()
+
+            return session
         except ValueError as ve:
             logging.error(f"ValueError: {ve}")
             raise
