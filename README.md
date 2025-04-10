@@ -125,57 +125,34 @@ Both methods require that the specified environment in connections.toml matches 
 
 Snowflow supports two authentication methods for connecting to Snowflake:
 
-1. **Username and Password**
-2. **RSA Key-Pair Authentication**
-3. **SSO (Single Sign-On) with Token Caching**
+1. **RSA Key-Pair Authentication**
+2. **SSO (Single Sign-On) with Token Caching**
 
-### 1. Username and Password Authentication
 
-This is the default and most straightforward authentication method. All the necessary information is provided in the `connections.toml` file.
-
-### 2. RSA Key-Pair Authentication
+### 1. RSA Key-Pair Authentication
 
 RSA Key-Pair Authentication is a more secure alternative to username/password. It requires generating a private-public key pair, configuring Snowflake to use your public key, and using your private key for authentication in Snowflow.
+https://docs.snowflake.com/en/user-guide/key-pair-auth#generate-the-private-key
 
 #### Steps to Set Up RSA Key-Pair Authentication:
 
 1. **Generate RSA Key-Pair:**
-   You can generate a new RSA key-pair using OpenSSL:
-   ```bash
-   openssl genrsa -out rsa_key.pem 2048
-   ```
+   Follow the instructions from Snowflake to generate an encrypted private key pair, and make sure to note the password used. Apply the public key to the desired user
 
-2. **Convert Private Key to DER Format:**
-   Snowflake requires the private key in DER format. Use the following command to convert your `.pem` key:
-   ```bash
-   openssl pkcs8 -topk8 -inform PEM -outform DER -in rsa_key.pem -out rsa_key.der -nocrypt
-   ```
-
-3. **Upload the Public Key to Snowflake:**
-   Extract the public key from the private key and upload it to Snowflake:
-   ```bash
-   openssl rsa -in rsa_key.pem -pubout -out rsa_key.pub
-   ```
-   
-   In Snowflake, run the following command to associate the public key with your Snowflake user:
-   ```sql
-   ALTER USER your_username SET rsa_public_key = 'your_public_key_contents';
-   ```
-
-5. **Test the Connection:**
+2. **Test the Connection:**
    Once you have updated your `connections.toml` and added the public key to Snowflake, test the connection by running a Snowflow command:
    ```bash
    snowflow deploy -e <environment> -d <database> -s <schema>
    ```
 
-### 3. SSO (Single Sign-On) with Token Caching
+### 2. SSO (Single Sign-On) with Token Caching
 
 This method uses a given Single Sign-On provider of your choice and securely caches a session token to reduce the need for repeated authentications. The first time you connect using SSO, Snowflow will authenticate via an external browser and store the session token in a secure cache file for future use. If the cached token is valid, Snowflow will use it for future connections. If not, it will re-authenticate through the browser, update the cache with a new token, and resume the connection. 
 
 
 ## Configuration Files
 
-Snowflow requires `connections.toml` to define how it interacts with Snowflake. `query_variables.yaml` is optional. Below are setup instructions and explanations for both.
+Snowflow requires `connections.toml` to define how it interacts with Snowflake. `query_variables.yaml` should be present in the repository, but usage is optional. Below are setup instructions and explanations for both.
 
 ### 1. `connections.toml`
 
@@ -183,34 +160,24 @@ The `connections.toml` file defines the connection settings for each environment
 
 #### Example Configuration:
 ```toml
-[environment_name]
-name = "user"
-account = "your_snowflake_account_url"
-user = "USERNAME"
+[environment_using_rsa]
+account = "<snowflake org>-<snowflake account>"
+user = "<username>"
 authenticator = "snowflake_jwt"
-private_key_path = "local path to private key"
-database = "your_database"
-warehouse = "your_warehouse"
-role = "your_role"
+private_key_path = "<local path to private key file>.p8"
+private_key_file_pwd = "<password for private key file>"
+database = "<your_database>"
+warehouse = "<your_warehouse>"
+role = "<your_role>"
 
-[evironment_name] 
-name = "user"
-account = "your_snowflake_account_url"
-user = "USERNAME"
-authenticator = "snowflake"
-password = "your_password"
-database = "your_database"
-warehouse = "your_warehouse"
-role = "your_role"
 
-[evironment_name] 
-name = "user"
-account = "your_snowflake_account_url"
-user = "USERNAME"
+[environment_using_sso] 
+account = "<snowflake org>-<snowflake account>"
+user = "<username>"
 authenticator = "externalbrower"
-database = "your_database"
-warehouse = "your_warehouse"
-role = "your_role"
+database = "<your_database>"
+warehouse = "<your_warehouse>"
+role = "<your_role>"
 ```
 
 ### 2. `query_variables.yaml`
@@ -238,18 +205,18 @@ Variable names within query_variables.yaml can be in any format, but the !!!vari
 
 #### Example Content for `query_variables.yaml`:
 ```yaml
-branch_name (eg: dev):
+dev_env (should match a name in the connections.toml file):
   '!!!storage_url!!!': YOUR_STORAGE_URL
-  '!!!ENABLED!!!': 'TRUE'
+  '!!!ENABLED!!!': 'FALSE'
+  '!!!WAREHOUSE!!!': DEV_WH
 
-branch_name (eg: prd):
+tst_env (should match a name in the connections.toml file):
   '!!!storage_url!!!': YOUR_STORAGE_URL
   '!!!ENABLED!!!': 'TRUE'
+  '!!!WAREHOUSE!!!': TST_WH
 ```
 In this example:
-
-* dev and prd are environment keys, each containing variables specific to that environment.
-* The !!!storage_url!!! and !!!ENABLED!!! variables are assigned values specific to each environment.
+* The !!!storage_url!!! and !!!ENABLED!!! variables are assigned values specific to each environment. Snowflow will replace these values in the scripts depending on the environment. 
 
 #### Usage Examples
 
@@ -269,32 +236,20 @@ In this case:
 
 2. **YAML Example**
 
-You can set up a YAML file like below:
+You can set up a dag YAML file like below:
 
 ```yaml
-stage_config:
-  url: '!!!storage_url!!!'
-  enabled: '!!!ENABLED!!!'
+DAG_NAME: <name>
+SCHEDULE: USING CRON 0 8 * * * America/New_York
+ROOT_TASK: root
+WAREHOUSE: '!!!WAREHOUSE!!!'
+ALLOW_OVERLAPPING_EXECUTION: 'FALSE'
+ENABLED: '!!!ENABLED!!!'
 ```
 In this case:
 
 * The values for url and enabled would be replaced dynamically based on the environment, pulling from `query_variables.yaml`.
 
-## Requirements
-
-This project requires the following dependencies, which are listed in `requirements.txt`:
-
-* snowflake-connector-python 
-* snowflake-snowpark-python 
-* networkx 
-* toml 
-* pyyaml
-
-To install the dependencies, run:
-
-```
-pip install -r requirements.txt
-```
 
 ### 3. Pipeline YAML File
 
@@ -305,59 +260,54 @@ Snowflow can be integrated into CI/CD pipelines to automate the deployment proce
 trigger:
   branches:
     include:
-      - dev
-      - prd  
-
+    - <dev_branch>
+    - <tst_branch>
+    - <prd_branch>
 pool:
-  vmImage: 'ubuntu-latest'  
-
-# Install the correct Python version
+  vmImage: 'ubuntu-latest'
+variables:
+  ${{ if eq(variables['Build.SourceBranchName'], 'oca_datamart_dev') }}:
+    snow_env: DEV_ENV
+  ${{ if eq(variables['Build.SourceBranchName'], 'oca_datamart_tst') }}:
+    snow_env: TST_ENV
+  ${{ if eq(variables['Build.SourceBranchName'], 'oca_datamart_prd') }}:
+    snow_env: PRD_ENV
 steps:
 - task: UsePythonVersion@0
-  displayName: 'Set Python version to 3.9'
+  displayName: 'Use Python 3.9.x'
   inputs:
     versionSpec: '3.9.x'
-
-# Download the required secure files 
 - task: DownloadSecureFile@1
+  name: connectionsfile
+  displayName: ' Download connections.toml'
   inputs:
-    secureFile: 'connections.toml'
-  displayName: 'Download connections.toml'
-
-# Move connections.toml file and rsa_key.der to correct location
-# Dynamically update the private key path in connections.toml
-# Extract local private_key_path and replace it with Linux path
+    secureFile: 'connections.toml' 
+    
+- task: DownloadSecureFile@1
+  name: rsakey
+  displayName: 'Download RSA private key'
+  inputs:
+    secureFile: 'devops_rsa_key.p8'
 - script: |
     mkdir -p ~/.snowflake
-    mv $(Agent.TempDirectory)/connections.toml ~/.snowflake/connections.toml
-    mv $(Agent.TempDirectory)/rsa_key.der ~/.snowflake/rsa_key.der
-    local_key_path = $(grep 'private_key_path' ~/.snowflake/connections.toml | awk -F'=' '{print $2}' | tr -d ' "')
-    sed -i 's|C:/Users/XYZ/rsa_key.der|/home/vsts/.snowflake/rsa_key.der|g' ~/.snowflake/connections.toml
+    echo $(rsakey.secureFilePath)
+    echo $(connectionsfile.secureFilePath)
+    chmod 644 $(rsakey.secureFilePath)
+    mv $(connectionsfile.secureFilePath) ~/.snowflake/connections.toml
+    chmod 644 ~/.snowflake/connections.toml
   displayName: 'Move files to Snowflake folder'
 
 # Install Python dependencies and Snowflow
 - script: |
-    pip install -r requirements.txt
-    pip install snowflow
+    pip install snowflow --upgrade
   displayName: 'Install dependencies and Snowflow'
 
-# Deploy the changes using Snowflow for the development branch
 - task: Bash@3
   displayName: 'Run Snowflow deployment for dev'
   inputs:
     targetType: 'inline'
     script: |
-      snowflow deploy -e dev_environment -d your_database -s your_schema
-  condition: eq(variables['Build.SourceBranchName'], 'dev')
-
-# Deploy the changes using Snowflow for the production branch
-- task: Bash@3
-  displayName: 'Run Snowflow deployment for production'
-  inputs:
-    targetType: 'inline'
-    script: |
-      snowflow deploy -e prd_environment -d your_database -s your_schema
-  condition: eq(variables['Build.SourceBranchName'], 'prd')
+      snowflow deploy -e $(snow_env) -d <database name> -s <schema name>
 ```
 
 ### File Structure for SQL Scripts
