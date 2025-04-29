@@ -161,7 +161,7 @@ class DirectoryHandler:
     def mkdir(self, path: Path) -> Path:
         try:
             logging.info('Making the directory if not exists: ' + str(path))
-            path.mkdir(parents=False, exist_ok=True)
+            path.mkdir(parents=True, exist_ok=True)
             return path
         except FileNotFoundError as e:
             logging.error(e)
