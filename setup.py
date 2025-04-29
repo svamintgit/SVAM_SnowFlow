@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="snowflow",
-    version="0.0.3",
+    version="0.0.11",
     author="Thomas Garcia, Aryan Singh",
     author_email="tgarcia@svam.com, aryan.singh@svam.com",
     description="SnowFlow - A Snowflake Deployment Tool",
