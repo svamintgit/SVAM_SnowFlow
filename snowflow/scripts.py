@@ -199,9 +199,7 @@ class DirectoryHandler:
         return Path(os.path.join(os.getcwd(), 'snowflake', relative_path))
 
 class Environment:
-    def __init__(self, environment: str):
-        if not environment:
-            raise ValueError("Environment not specified. Please provide a valid environment.")
+    def __init__(self, environment: str = ''):
         self.dh = DirectoryHandler()
         self.sp = ScriptParser()
         self.query_variables_file = 'query_variables.yaml'
@@ -211,13 +209,12 @@ class Environment:
 
     def get_query_variables(self, env):
         try:
-            local_path = os.path.join(os.getcwd(), 'query_variables.yaml')
+            local_path = Path(self.dh.root_dir, 'query_variables.yaml')
             logging.debug(f"Looking for query variables in: {local_path}")
 
-            if not os.path.exists(local_path):
-                logging.debug("query_variables.yaml not found.")
+            if not local_path.exists():
+                local_path.touch()
                 return {}
-
             raw_vars = self.sp.parse_yaml_file(local_path)
 
             if raw_vars is None:
@@ -246,15 +243,16 @@ class SnowflakeAcct:
             self.sp = self.environment.sp
             self.dh = self.environment.dh
         else:
-            self.environment = None
+            self.environment = Environment()
             self.sp = ScriptParser()
             self.dh = DirectoryHandler() 
         
-        self.env_dir = Path(os.getcwd(), 'snowflake')
+        self.env_dir = Path(self.dh.root_dir,'snowflake')
         self.child_objects = ['databases', 'integrations', 'roles', 'warehouses', 'network_rules', 'network_policies']
         self.child_lookup = self.dh.get_path_lookup(self.env_dir, self.child_objects)
 
     def initialize(self) -> None:
+        self.env_dir.mkdir(parents=True, exist_ok=True)
         Path(self.env_dir, 'init.sql').touch()
         Path(self.env_dir, 'grants.sql').touch()
 
