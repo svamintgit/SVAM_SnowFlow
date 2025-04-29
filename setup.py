@@ -19,7 +19,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'snowflow = snowflow.snowflow:main', 
+            #'snowflow = snowflow.snowflow:main', 
+            'snowflow = snowflow:main',
         ],
     },
     classifiers=[
