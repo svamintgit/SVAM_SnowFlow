@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="snowflow",
-    version="0.0.12",
+    version="0.0.13",
     author="Thomas Garcia, Aryan Singh",
     author_email="tgarcia@svam.com, aryan.singh@svam.com",
     description="SnowFlow - A Snowflake Deployment Tool",
@@ -19,8 +19,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            #'snowflow = snowflow.snowflow:main', 
-            'snowflow = snowflow:main',
+            'snowflow = snowflow.handler:main',  
+            #'snowflow = snowflow:main',
         ],
     },
     classifiers=[
